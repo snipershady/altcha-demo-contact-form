@@ -1,26 +1,22 @@
 <?php
 
-require_once 'vendor/autoload.php';
+require_once __DIR__.'/vendor/autoload.php';
 
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\ChallengeOptions;
 
-// Imposta l'header per JSON e CORS
+// Imposta l'header per JSON
 header('Content-Type: application/json');
 
 // La tua chiave segreta (deve essere la stessa di action.php)
-$hmac_key = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodimartenza';
+$hmacKey = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodimartenza';
 
-// Inizializza la libreria
-$altcha = new Altcha($hmac_key);
-
-// Configura le opzioni della sfida
+$altcha = new Altcha($hmacKey);
 $options = new ChallengeOptions(
-        maxNumber: 50000,
-        expires: (new \DateTimeImmutable())->add(new \DateInterval('PT15M')) // Scade tra 15 min
+    maxNumber: 50000,
+    expires: new DateTimeImmutable()->add(new DateInterval('PT2M')) // Scade tra 2 min
 );
 
-// Crea la sfida
 $challenge = $altcha->createChallenge($options);
 
 // Converti in formato compatibile con il widget JavaScript
@@ -33,5 +29,4 @@ $challengeData = [
     'signature' => $challenge->signature,
 ];
 
-// Restituisci la challenge come JSON
 echo json_encode($challengeData);

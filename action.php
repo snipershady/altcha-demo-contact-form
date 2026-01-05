@@ -1,21 +1,22 @@
 <?php
 
-require_once 'vendor/autoload.php';
+require_once __DIR__.'/vendor/autoload.php';
 
 use AltchaOrg\Altcha\Altcha;
 
 $hmacKey = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodimartenza';
 
-$requestMethod = filter_input(INPUT_SERVER, "REQUEST_METHOD");
-if ($requestMethod === 'GET') {
+$requestMethod = filter_input(INPUT_SERVER, 'REQUEST_METHOD');
+if ('GET' === $requestMethod) {
     header('Location: index.php');
     exit;
 }
 
-if ($requestMethod === 'POST') {
-    $altchaPayload = filter_input(INPUT_POST, "altcha");
-    $email = filter_input(INPUT_POST, "email", FILTER_SANITIZE_EMAIL);
-    $message = filter_input(INPUT_POST, "message", FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+// Simuliamo un controller ipotetico dove poi i dati del form vengono letti
+if ('POST' === $requestMethod) {
+    $altchaPayload = filter_input(INPUT_POST, 'altcha');
+    $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
+    $message = filter_input(INPUT_POST, 'message', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
     // Verifica che il campo altcha sia presente
     if (empty($altchaPayload)) {
@@ -37,13 +38,14 @@ if ($requestMethod === 'POST') {
             http_response_code(400);
             showResponse(false, 'Verifica Fallita', 'La verifica di sicurezza non è andata a buon fine. Per favore riprova.');
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         http_response_code(500);
         showResponse(false, 'Errore del Server', 'Si è verificato un errore durante l\'elaborazione della richiesta.');
     }
 }
 
-function showResponse(bool $success, string $title, string $message, ?string $email = null, ?string $userMessage = null) {
+function showResponse(bool $success, string $title, string $message, ?string $email = null, ?string $userMessage = null): void
+{
     ?>
     <!DOCTYPE html>
     <html lang="it">
@@ -115,15 +117,15 @@ function showResponse(bool $success, string $title, string $message, ?string $em
         <div class="container">
             <div class="response-container">
                 <div class="icon-circle <?php echo $success ? 'success' : 'error'; ?>">
-                    <?php if ($success): ?>
+                    <?php if ($success) { ?>
                         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
                             <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
                         </svg>
-                    <?php else: ?>
+                    <?php } else { ?>
                         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" class="bi bi-x-circle-fill" viewBox="0 0 16 16">
                             <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0M5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293z"/>
                         </svg>
-                    <?php endif; ?>
+                    <?php } ?>
                 </div>
 
                 <h1 class="mb-3 <?php echo $success ? 'text-success' : 'text-danger'; ?>">
@@ -134,13 +136,13 @@ function showResponse(bool $success, string $title, string $message, ?string $em
                     <?php echo htmlspecialchars($message); ?>
                 </p>
 
-                <?php if ($success && $email && $userMessage): ?>
+                <?php if ($success && $email && $userMessage) { ?>
                     <div class="message-preview">
                         <p class="mb-2"><strong>Email:</strong> <?php echo htmlspecialchars($email); ?></p>
                         <p class="mb-0"><strong>Messaggio:</strong></p>
                         <p class="text-muted"><?php echo nl2br(htmlspecialchars($userMessage)); ?></p>
                     </div>
-                <?php endif; ?>
+                <?php } ?>
 
                 <div class="mt-4">
                     <a href="index.php" class="btn btn-primary btn-lg btn-back">
