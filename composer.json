@@ -1,0 +1,19 @@
+{
+    "name": "shady/altcha",
+    "description": "altcha-integration",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Shady\\Altcha\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Stefano"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "altcha-org/altcha": "^1.3"
+    }
+}
