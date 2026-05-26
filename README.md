@@ -1,0 +1,402 @@
+# ALTCHA Demo — Integrazioni PHP
+
+Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org/) in PHP, con widget frontend e verifica server-side.
+
+---
+
+## Indice
+
+- [Requisiti](#requisiti)
+- [Installazione](#installazione)
+- [Struttura del progetto](#struttura-del-progetto)
+- [Integrazione 1 — Widget v3 visibile (SHA-256)](#integrazione-1--widget-v3-visibile-sha-256)
+- [Integrazione 2 — Widget PoW invisibile (Argon2id)](#integrazione-2--widget-pow-invisibile-argon2id)
+- [Sequence diagram — Widget v3](#sequence-diagram--widget-v3)
+- [Sequence diagram — PoW Argon2id invisibile](#sequence-diagram--pow-argon2id-invisibile)
+- [Parametri di configurazione](#parametri-di-configurazione)
+- [Note di sicurezza](#note-di-sicurezza)
+
+---
+
+## Requisiti
+
+| Componente | Versione minima |
+|---|---|
+| PHP | 8.1 |
+| Estensione `ext-sodium` | inclusa in PHP 8.1+ |
+| Composer | 2.x |
+
+Verificare che `ext-sodium` sia abilitata:
+
+```bash
+php -m | grep sodium
+```
+
+---
+
+## Installazione
+
+```bash
+git clone <repository>
+cd altcha-demo-contact-form
+composer install
+```
+
+La libreria `altcha-org/altcha ^2.0` viene installata tramite Composer. Non sono necessarie altre dipendenze runtime.
+
+---
+
+## Struttura del progetto
+
+```
+.
+├── indexv3.php       # Form con widget ALTCHA v3 visibile (SHA-256)
+├── actionv3.php      # Verifica server-side challenge v3
+├── indexpow.php      # Form con widget ALTCHA PoW invisibile (Argon2id)
+├── actionpow.php     # Verifica server-side challenge Argon2id
+├── composer.json
+└── vendor/
+    └── altcha-org/altcha/   # Libreria PHP ALTCHA v2.0.x
+```
+
+---
+
+## Integrazione 1 — Widget v3 visibile (SHA-256)
+
+**File:** `indexv3.php` + `actionv3.php`
+
+### Come funziona
+
+Il server genera una challenge SHA-256 tramite l'API V1 della libreria. Il widget viene reso nel form come checkbox "Non sono un robot": l'utente risolve il PoW cliccando, dopodiché può inviare il form. Il server verifica la soluzione in `actionv3.php`.
+
+### Generazione della challenge (indexv3.php)
+
+```php
+use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
+use AltchaOrg\Altcha\V1\ChallengeOptions;
+
+const HMAC_KEY = 'altcha-v3-demo-secret-key-2024';
+
+$altcha = new AltchaV1(hmacKey: HMAC_KEY);
+$challenge = $altcha->createChallenge(new ChallengeOptions(
+    maxNumber: 100000,
+    expires: new DateTimeImmutable('+5 minutes'),
+));
+```
+
+La challenge viene serializzata in JSON nel formato flat atteso dal widget v3:
+
+```php
+$challengeJson = htmlspecialchars(json_encode([
+    'algorithm' => $challenge->algorithm,
+    'challenge' => $challenge->challenge,
+    'maxnumber' => $challenge->maxNumber,
+    'salt'      => $challenge->salt,
+    'signature' => $challenge->signature,
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+```
+
+### Widget HTML
+
+```html
+<!-- Widget CDN (v3 SHA-based) -->
+<script async defer
+    src="https://cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js"
+    type="module">
+</script>
+
+<altcha-widget
+    challengejson="<?php echo $challengeJson ?>"
+    strings='{"label":"Non sono un robot","verified":"Verificato",...}'>
+</altcha-widget>
+```
+
+> **Nota:** per questa versione del widget (`cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js`) l'attributo per la challenge inline è `challengejson`, non `challenge`.
+
+### Verifica server-side (actionv3.php)
+
+```php
+use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
+
+$altchaRaw = filter_input(INPUT_POST, 'altcha');   // payload base64 dal widget
+
+$altcha   = new AltchaV1(hmacKey: HMAC_KEY);
+$verified = $altcha->verifySolution($altchaRaw);   // bool
+```
+
+`verifySolution()` controlla internamente:
+- Validità della firma HMAC sulla challenge
+- Correttezza della soluzione SHA-256
+- Scadenza della challenge (se impostata via `expires`)
+
+---
+
+## Integrazione 2 — Widget PoW invisibile (Argon2id)
+
+**File:** `indexpow.php` + `actionpow.php`
+
+### Come funziona
+
+Il server genera una challenge Argon2id tramite l'API V2 della libreria. Il widget è **invisibile**: appena la pagina si carica, risolve il PoW in background tramite un Web Worker. Solo a completamento avvenuto il pulsante di invio viene abilitato. L'utente non interagisce con il widget.
+
+### Generazione della challenge (indexpow.php)
+
+```php
+use AltchaOrg\Altcha\Algorithm\Argon2id;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\CreateChallengeOptions;
+
+const HMAC_KEY_POW = 'altcha-pow-argon2id-demo-key-2024';
+
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW);
+$challenge = $altcha->createChallenge(new CreateChallengeOptions(
+    algorithm: new Argon2id(),
+    cost: 1,
+    memoryCost: 16384,   // 16 MB (in KB)
+    keyPrefixLength: 1,  // prefisso 1 byte → ~256 tentativi medi
+    expiresAt: new DateTimeImmutable('+10 minutes'),
+));
+$challengeJsonRaw = $challenge->toJson();
+```
+
+### Registrazione algoritmo ARGON2ID nel browser
+
+Il widget `altcha@3` bundla solo SHA e PBKDF2. Argon2id deve essere registrato manualmente. Due vincoli da rispettare:
+
+1. **Cross-origin Worker:** i browser bloccano `new Worker('https://cdn.jsdelivr.net/...')`. Soluzione: fetch del worker → Blob → `URL.createObjectURL()`.
+2. **Race condition:** `connectedCallback` del widget si avvia durante `customElements.define()`, prima che il nostro codice JS possa registrare l'algoritmo. Soluzione: intercettare l'inizializzazione di `$altcha` tramite `Object.defineProperty` setter.
+
+```html
+<!-- Script 1: trap sincrono — deve precedere il modulo altcha -->
+<script>
+    (function () {
+        var blobUrlReady = fetch('https://cdn.jsdelivr.net/npm/altcha@3.0.10/dist/workers/argon2id.js')
+            .then(function (r) { return r.text(); })
+            .then(function (t) {
+                return URL.createObjectURL(new Blob([t], { type: 'application/javascript' }));
+            });
+
+        // Il modulo altcha esegue: globalThis.$altcha = globalThis.$altcha || {...}
+        // Intercettiamo quell'assegnazione per iniettare ARGON2ID nel Map algorithms
+        // prima che customElements.define() venga chiamato.
+        Object.defineProperty(window, '$altcha', {
+            configurable: true,
+            enumerable: true,
+            get: function () { return undefined; },
+            set: function (val) {
+                // Rimuove il trap (evita ricorsione) e ripristina come property normale
+                Object.defineProperty(window, '$altcha', {
+                    value: val, writable: true, configurable: true, enumerable: true
+                });
+                if (val && val.algorithms) {
+                    val.algorithms.set('ARGON2ID', function () {
+                        return blobUrlReady.then(function (url) { return new Worker(url); });
+                    });
+                }
+            }
+        });
+    }());
+</script>
+
+<!-- Script 2: carica il modulo altcha (deferred automaticamente) -->
+<script type="module"
+    src="https://cdn.jsdelivr.net/npm/altcha@3.0.10/dist/main/altcha.min.js">
+</script>
+```
+
+### Widget HTML
+
+```html
+<altcha-widget
+    id="altchaWidget"
+    display="invisible"
+    auto="onload"
+    challenge="<?= htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8') ?>"
+    name="altcha">
+</altcha-widget>
+```
+
+- `display="invisible"` — nasconde completamente il widget dalla UI
+- `auto="onload"` — avvia il PoW automaticamente al caricamento
+- `challenge` — JSON della challenge inline (il widget lo riconosce perché inizia con `{`)
+
+### Abilitazione del pulsante a completamento
+
+```javascript
+document.getElementById('altchaWidget').addEventListener('verified', function () {
+    document.getElementById('submitBtn').disabled = false;
+});
+```
+
+### Verifica server-side (actionpow.php)
+
+Il payload del widget v2 è un JSON base64 con struttura nidificata:
+
+```json
+{
+  "challenge": { "parameters": {...}, "signature": "..." },
+  "solution":  { "counter": 123, "derivedKey": "abc123..." }
+}
+```
+
+```php
+use AltchaOrg\Altcha\Algorithm\Argon2id;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\Challenge;
+use AltchaOrg\Altcha\ChallengeParameters;
+use AltchaOrg\Altcha\Payload;
+use AltchaOrg\Altcha\Solution;
+use AltchaOrg\Altcha\VerifySolutionOptions;
+
+$json = base64_decode(filter_input(INPUT_POST, 'altcha'), true);
+$data = json_decode($json, true);
+
+$params    = ChallengeParameters::fromArray($data['challenge']['parameters']);
+$challenge = new Challenge($params, $data['challenge']['signature']);
+$solution  = new Solution(
+    (int)    $data['solution']['counter'],
+    (string) $data['solution']['derivedKey'],
+);
+$payload = new Payload($challenge, $solution);
+
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW);
+$result = $altcha->verifySolution(new VerifySolutionOptions(
+    payload:   $payload,
+    algorithm: new Argon2id(),
+));
+
+$verified = $result->verified;
+// $result->expired          → true se la challenge è scaduta
+// $result->invalidSignature → true se la firma HMAC non corrisponde
+```
+
+---
+
+## Sequence diagram — Widget v3
+
+```mermaid
+sequenceDiagram
+    actor U as Utente
+    participant B as Browser
+    participant S as Server PHP
+    participant CDN as CDN jsDelivr
+
+    U->>B: GET indice (indexv3.php)
+    B->>S: HTTP GET /indexv3.php
+    S->>S: V1\Altcha::createChallenge()<br/>(SHA-256, maxNumber=100000, exp=+5min)
+    S-->>B: HTML + challengejson attribute
+
+    B->>CDN: Carica altcha.min.js (gh/altcha-org)
+    CDN-->>B: Widget SHA-256
+
+    B->>B: Widget renderizza checkbox<br/>"Non sono un robot"
+
+    U->>B: Click checkbox
+    B->>B: PoW SHA-256 (fino a soluzione)<br/>Worker interno
+
+    B->>B: Widget imposta campo nascosto<br/>name="altcha" (payload base64)
+
+    U->>B: Submit form
+    B->>S: HTTP POST /actionv3.php<br/>username, password, altcha
+
+    S->>S: V1\Altcha::verifySolution(altchaRaw)<br/>• Verifica firma HMAC<br/>• Verifica soluzione SHA-256<br/>• Verifica scadenza
+
+    alt Verifica OK
+        S-->>B: HTTP 200 — Accesso riuscito
+    else Verifica fallita
+        S-->>B: HTTP 400 — Accesso negato
+    end
+```
+
+---
+
+## Sequence diagram — PoW Argon2id invisibile
+
+```mermaid
+sequenceDiagram
+    actor U as Utente
+    participant B as Browser
+    participant S as Server PHP
+    participant CDN as CDN jsDelivr
+
+    U->>B: GET indice (indexpow.php)
+    B->>S: HTTP GET /indexpow.php
+    S->>S: Altcha::createChallenge()<br/>(Argon2id, cost=1, mem=16MB,<br/>keyPrefixLen=1, exp=+10min)
+    S-->>B: HTML con:<br/>• script trap Object.defineProperty<br/>• module src=altcha@3.0.10<br/>• challenge JSON in attributo widget
+
+    Note over B: Script sync (non-module) esegue subito:<br/>definisce setter su window.$altcha<br/>avvia fetch blob worker Argon2id
+
+    B->>CDN: Fetch argon2id.js (worker)
+    CDN-->>B: Sorgente worker
+
+    B->>B: Crea Blob URL same-origin
+
+    B->>CDN: Carica altcha@3.0.10/dist/main/altcha.min.js<br/>(modulo, deferred)
+    CDN-->>B: Bundle altcha@3
+
+    Note over B: Modulo esegue:<br/>window.$altcha = window.$altcha ∥ {…}<br/>→ setter trap intercetta<br/>→ ARGON2ID iniettato nel Map algorithms<br/>→ customElements.define('altcha-widget')
+
+    B->>B: connectedCallback() avviata<br/>await Promise.resolve() → yield
+    B->>B: Algoritmo ARGON2ID già registrato<br/>Svelte component montato
+    B->>B: PoW Argon2id avviato in background<br/>Worker (Blob URL) con WASM hash-wasm
+
+    Note over U,B: Widget invisibile — nessuna interazione utente
+
+    B->>B: PoW completato<br/>evento "verified" → submit button abilitato
+
+    U->>B: Submit form
+    B->>S: HTTP POST /actionpow.php<br/>username, password, altcha (base64)
+
+    S->>S: base64_decode → json_decode<br/>ChallengeParameters::fromArray()<br/>new Challenge / Solution / Payload
+
+    S->>S: Altcha::verifySolution()<br/>• Verifica firma HMAC<br/>• Ricalcola Argon2id con stessi parametri<br/>• Confronta derivedKey con keyPrefix<br/>• Verifica scadenza
+
+    alt Verifica OK
+        S-->>B: HTTP 200 — Accesso riuscito
+    else Verifica fallita / scaduta
+        S-->>B: HTTP 400 — Accesso negato<br/>(expired / invalidSignature / wrong solution)
+    end
+```
+
+---
+
+## Parametri di configurazione
+
+### API V1 — Widget visibile (SHA)
+
+| Parametro | Default | Descrizione |
+|---|---|---|
+| `algorithm` | `SHA-256` | Algoritmo hash (`SHA-1`, `SHA-256`, `SHA-512`) |
+| `maxNumber` | `1.000.000` | Limite superiore del numero da trovare. Valori più alti → più difficoltà |
+| `expires` | `null` | Scadenza della challenge (`DateTimeImmutable`) |
+| `saltLength` | `12` | Lunghezza del salt casuale in byte |
+
+### API V2 — Widget PoW Argon2id invisibile
+
+| Parametro | Default | Descrizione |
+|---|---|---|
+| `algorithm` | — | Istanza `Argon2id` (o `Pbkdf2`, `Scrypt`) |
+| `cost` | — | Numero di iterazioni Argon2id |
+| `memoryCost` | `null` | Memoria in KB (es. `16384` = 16 MB) |
+| `keyPrefixLength` | `null` | Byte del prefisso da indovinare. `1` → ~256 tentativi medi; `2` → ~65.536 |
+| `keyLength` | `32` | Lunghezza della chiave derivata in byte |
+| `expiresAt` | `null` | Scadenza come `DateTimeImmutable` o timestamp Unix |
+| `parallelism` | `null` | Grado di parallelismo Argon2id |
+
+### Linee guida sulla difficoltà PoW
+
+| Caso d'uso | `keyPrefixLength` | Durata media browser |
+|---|---|---|
+| Anti-spam leggero | `1` | ~1–3 secondi |
+| Login protetto | `2` | ~10–30 secondi |
+| Registrazione ad alto rischio | `3` | ~3–10 minuti |
+
+---
+
+## Note di sicurezza
+
+- **HMAC key**: le costanti `HMAC_KEY` e `HMAC_KEY_POW` devono essere mosse in variabili d'ambiente (`.env`) in produzione. Non committare mai le chiavi nel repository.
+- **Replay attack**: la libreria controlla la scadenza ma **non gestisce un nonce store** per prevenire il riuso della stessa soluzione. In produzione occorre memorizzare i nonce verificati (es. in Redis/database) per la durata della validità della challenge.
+- **HTTPS**: il payload `altcha` viaggia nel body POST; usare sempre HTTPS per evitare intercettazioni.
+- **Argon2id `memoryCost`**: valori alti (> 64 MB) possono mettere sotto pressione dispositivi mobili o browser con memoria limitata. Testare su hardware target prima del deploy.
+- **CDN integrity**: in produzione valutare l'aggiunta dell'attributo `integrity` (Subresource Integrity) ai tag `<script>` che caricano da CDN.
