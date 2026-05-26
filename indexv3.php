@@ -17,10 +17,10 @@ $challenge = $altcha->createChallenge(new ChallengeOptions(
 
 $challengeJson = htmlspecialchars(json_encode([
     'algorithm' => $challenge->algorithm,
-    'challenge'  => $challenge->challenge,
-    'maxnumber'  => $challenge->maxNumber,
-    'salt'       => $challenge->salt,
-    'signature'  => $challenge->signature,
+    'challenge' => $challenge->challenge,
+    'maxnumber' => $challenge->maxNumber,
+    'salt' => $challenge->salt,
+    'signature' => $challenge->signature,
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 
 ?>
@@ -116,7 +116,7 @@ $challengeJson = htmlspecialchars(json_encode([
 
                         <div class="mb-4 d-flex justify-content-center">
                             <altcha-widget
-                                challengejson="<?php echo $challengeJson ?>"
+                                challengejson="<?php echo $challengeJson; ?>"
                                 strings='{"error":"Errore di verifica.","expired":"Verifica scaduta, ricarica la pagina.","footer":"Protetto da <a href=\"https://altcha.org\" target=\"_blank\">ALTCHA</a>","label":"Non sono un robot","verified":"Verificato","verifying":"Verifica in corso...","waitAlert":"Attendi..."}'>
                             </altcha-widget>
                         </div>

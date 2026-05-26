@@ -163,7 +163,7 @@ $challengeJsonRaw = $challenge->toJson();
                             id="altchaWidget"
                             display="invisible"
                             auto="onload"
-                            challenge="<?= htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8') ?>"
+                            challenge="<?php echo htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8'); ?>"
                             name="altcha">
                         </altcha-widget>
 

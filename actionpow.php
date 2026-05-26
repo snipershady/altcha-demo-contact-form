@@ -73,7 +73,7 @@ if (!$verified) {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title><?php echo $verified ? 'Accesso riuscito' : 'Accesso negato' ?> — ALTCHA PoW Argon2id</title>
+        <title><?php echo $verified ? 'Accesso riuscito' : 'Accesso negato'; ?> — ALTCHA PoW Argon2id</title>
 
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -128,30 +128,30 @@ if (!$verified) {
             <div class="card">
                 <div class="card-body p-4 p-md-5 text-center">
 
-                    <div class="icon-circle <?php echo $verified ? 'success' : 'error' ?>">
-<?php if ($verified): ?>
+                    <div class="icon-circle <?php echo $verified ? 'success' : 'error'; ?>">
+<?php if ($verified) { ?>
                             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="white" class="bi bi-check-lg" viewBox="0 0 16 16">
                             <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/>
                             </svg>
-<?php else: ?>
+<?php } else { ?>
                             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="white" class="bi bi-x-lg" viewBox="0 0 16 16">
                             <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/>
                             </svg>
-<?php endif; ?>
+<?php } ?>
                     </div>
 
-<?php if ($verified): ?>
+<?php if ($verified) { ?>
                     <h3 class="fw-bold text-success mb-2">Accesso riuscito</h3>
                     <p class="text-muted mb-4">Verifica PoW Argon2id completata con successo.</p>
 
                     <div class="text-start bg-light rounded p-3 mb-4 small">
                         <div class="mb-1">
                             <span class="fw-semibold">Username:</span>
-                            <?php echo $username !== '' ? $username : '<em class="text-muted">non fornito</em>' ?>
+                            <?php echo '' !== $username ? $username : '<em class="text-muted">non fornito</em>'; ?>
                         </div>
                         <div>
                             <span class="fw-semibold">Password:</span>
-                            <?php echo $password !== '' ? str_repeat('•', max(6, mb_strlen($password))) : '<em class="text-muted">non fornita</em>' ?>
+                            <?php echo '' !== $password ? str_repeat('•', max(6, mb_strlen($password))) : '<em class="text-muted">non fornita</em>'; ?>
                         </div>
                     </div>
 
@@ -163,9 +163,9 @@ if (!$verified) {
                         PoW Argon2id verificato lato server con successo.
                     </div>
 
-<?php else: ?>
+<?php } else { ?>
                     <h3 class="fw-bold text-danger mb-2">Accesso negato</h3>
-                    <p class="text-muted mb-4"><?php echo htmlspecialchars($errorMsg ?? 'Verifica ALTCHA non riuscita.', ENT_QUOTES, 'UTF-8') ?></p>
+                    <p class="text-muted mb-4"><?php echo htmlspecialchars($errorMsg ?? 'Verifica ALTCHA non riuscita.', ENT_QUOTES, 'UTF-8'); ?></p>
 
                     <div class="alert alert-danger text-start small py-2 mb-4">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-exclamation-triangle me-1" viewBox="0 0 16 16">
@@ -174,7 +174,7 @@ if (!$verified) {
                         </svg>
                         Torna indietro, attendi il completamento del PoW e riprova.
                     </div>
-<?php endif; ?>
+<?php } ?>
 
                     <a href="indexpow.php" class="btn btn-primary btn-lg btn-back">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-arrow-left me-2 mb-1" viewBox="0 0 16 16">
