@@ -75,7 +75,7 @@ Il server genera una challenge SHA-256 tramite l'API V1 della libreria. Il widge
 use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
 use AltchaOrg\Altcha\V1\ChallengeOptions;
 
-const HMAC_KEY = 'altcha-v3-demo-secret-key-2024';
+const HMAC_KEY = 'altcha-v3-demo-secret-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
 $altcha = new AltchaV1(hmacKey: HMAC_KEY);
 $challenge = $altcha->createChallenge(new ChallengeOptions(
@@ -146,7 +146,7 @@ use AltchaOrg\Altcha\Algorithm\Argon2id;
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\CreateChallengeOptions;
 
-const HMAC_KEY_POW = 'altcha-pow-argon2id-demo-key-2024';
+const HMAC_KEY_POW = 'altcha-pow-argon2id-demo-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
 $altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW);
 $challenge = $altcha->createChallenge(new CreateChallengeOptions(
@@ -211,7 +211,7 @@ Il widget `altcha@3` bundla solo SHA e PBKDF2. Argon2id deve essere registrato m
     id="altchaWidget"
     display="invisible"
     auto="onload"
-    challenge="<?= htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8') ?>"
+    challenge="<?php echo  htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8') ?>"
     name="altcha">
 </altcha-widget>
 ```

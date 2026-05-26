@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__.'/vendor/autoload.php';
@@ -8,18 +7,17 @@ use AltchaOrg\Altcha\Algorithm\Argon2id;
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\CreateChallengeOptions;
 
-const HMAC_KEY_POW = 'altcha-pow-argon2id-demo-key-2024';
+const HMAC_KEY_POW = 'altcha-pow-argon2id-demo-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
 $altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW);
 $challenge = $altcha->createChallenge(new CreateChallengeOptions(
     algorithm: new Argon2id(),
     cost: 1,
-    memoryCost: 16384,   // 16 MB — lower memory cost for browser compatibility
-    keyPrefixLength: 1,  // 1-byte prefix → ~256 average solver attempts
+    memoryCost: 16384, // 16 MB — lower memory cost for browser compatibility
+    keyPrefixLength: 1, // 1-byte prefix → ~256 average solver attempts
     expiresAt: new DateTimeImmutable('+10 minutes'),
 ));
 $challengeJsonRaw = $challenge->toJson();
-
 ?><!DOCTYPE html>
 <html lang="it">
     <head>
@@ -43,18 +41,26 @@ $challengeJsonRaw = $challenge->toJson();
         <script>
             (function () {
                 var blobUrlReady = fetch('https://cdn.jsdelivr.net/npm/altcha@3.0.10/dist/workers/argon2id.js')
-                    .then(function (r) { return r.text(); })
-                    .then(function (t) { return URL.createObjectURL(new Blob([t], { type: 'application/javascript' })); });
+                        .then(function (r) {
+                            return r.text();
+                        })
+                        .then(function (t) {
+                            return URL.createObjectURL(new Blob([t], {type: 'application/javascript'}));
+                        });
 
                 Object.defineProperty(window, '$altcha', {
                     configurable: true,
                     enumerable: true,
-                    get: function () { return undefined; },
+                    get: function () {
+                        return undefined;
+                    },
                     set: function (val) {
-                        Object.defineProperty(window, '$altcha', { value: val, writable: true, configurable: true, enumerable: true });
+                        Object.defineProperty(window, '$altcha', {value: val, writable: true, configurable: true, enumerable: true});
                         if (val && val.algorithms) {
                             val.algorithms.set('ARGON2ID', function () {
-                                return blobUrlReady.then(function (url) { return new Worker(url); });
+                                return blobUrlReady.then(function (url) {
+                                    return new Worker(url);
+                                });
                             });
                         }
                     }
@@ -124,8 +130,8 @@ $challengeJsonRaw = $challenge->toJson();
                 <div class="card-header text-white text-center">
                     <h4 class="mb-0 fw-bold">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" class="bi bi-cpu-fill me-2 mb-1" viewBox="0 0 16 16">
-                            <path d="M6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5z"/>
-                            <path d="M5.5.5a.5.5 0 0 0-1 0V2A2.5 2.5 0 0 0 2 4.5H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2A2.5 2.5 0 0 0 4.5 12v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12a2.5 2.5 0 0 0 2.5-2.5h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13A2.5 2.5 0 0 0 10.5 2V.5a.5.5 0 0 0-1 0V2h-1V.5a.5.5 0 0 0-1 0V2h-1zm1 4.5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3A1.5 1.5 0 0 1 6.5 5"/>
+                        <path d="M6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5z"/>
+                        <path d="M5.5.5a.5.5 0 0 0-1 0V2A2.5 2.5 0 0 0 2 4.5H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2A2.5 2.5 0 0 0 4.5 12v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12a2.5 2.5 0 0 0 2.5-2.5h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13A2.5 2.5 0 0 0 10.5 2V.5a.5.5 0 0 0-1 0V2h-1V.5a.5.5 0 0 0-1 0V2h-1zm1 4.5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3A1.5 1.5 0 0 1 6.5 5"/>
                         </svg>
                         Login Demo
                     </h4>
@@ -179,8 +185,8 @@ $challengeJsonRaw = $challenge->toJson();
                                 id="submitBtn"
                                 disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-box-arrow-in-right me-2 mb-1" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M6 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 0-1 0v2A1.5 1.5 0 0 0 6.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-8A1.5 1.5 0 0 0 5 3.5v2a.5.5 0 0 0 1 0z"/>
-                                    <path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H1.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z"/>
+                                <path fill-rule="evenodd" d="M6 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 0-1 0v2A1.5 1.5 0 0 0 6.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-8A1.5 1.5 0 0 0 5 3.5v2a.5.5 0 0 0 1 0z"/>
+                                <path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H1.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z"/>
                                 </svg>
                                 Accedi
                             </button>

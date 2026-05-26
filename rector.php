@@ -5,11 +5,14 @@ declare(strict_types=1);
 use Rector\Config\RectorConfig;
 
 return RectorConfig::configure()
-    ->withPaths([
-        __DIR__ . '/src',
-    ])
-    // uncomment to reach your current PHP version
-    // ->withPhpSets()
-    ->withTypeCoverageLevel(0)
-    ->withDeadCodeLevel(0)
-    ->withCodeQualityLevel(0);
+                ->withPaths([
+                    __DIR__.'/',
+                ])
+                ->withSkip([
+                    __DIR__.'/vendor',
+                ])
+                // uncomment to reach your current PHP version
+                // ->withPhpSets()
+                ->withTypeCoverageLevel(0)
+                ->withDeadCodeLevel(0)
+                ->withCodeQualityLevel(0);
