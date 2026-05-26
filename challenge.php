@@ -1,32 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 require_once __DIR__.'/vendor/autoload.php';
 
+use AltchaOrg\Altcha\Algorithm\Sha;
+use AltchaOrg\Altcha\Algorithm\ShaAlgorithm;
 use AltchaOrg\Altcha\Altcha;
-use AltchaOrg\Altcha\ChallengeOptions;
+use AltchaOrg\Altcha\CreateChallengeOptions;
 
-// Imposta l'header per JSON
 header('Content-Type: application/json');
 
-// La tua chiave segreta (deve essere la stessa di action.php)
-$hmacKey = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodimartenza';
+$hmacKey = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
-$altcha = new Altcha($hmacKey);
-$options = new ChallengeOptions(
-    maxNumber: 50000,
-    expires: new DateTimeImmutable()->add(new DateInterval('PT2M')) // Scade tra 2 min
+$altcha = new Altcha(hmacSignatureSecret: $hmacKey);
+$options = new CreateChallengeOptions(
+    algorithm: new Sha(ShaAlgorithm::SHA256),
+    cost: 1,
+    keyPrefixLength: 2,   // prefisso random 2 byte → ~65 536 tentativi medi in browser
+    expiresAt: new DateTimeImmutable()->add(new DateInterval('PT2M')),
 );
 
 $challenge = $altcha->createChallenge($options);
 
-// Converti in formato compatibile con il widget JavaScript
-// Il widget si aspetta "maxnumber" (minuscolo) non "maxNumber"
-$challengeData = [
-    'algorithm' => $challenge->algorithm,
-    'challenge' => $challenge->challenge,
-    'maxnumber' => $challenge->maxNumber, // Converti da camelCase a lowercase
-    'salt' => $challenge->salt,
-    'signature' => $challenge->signature,
-];
-
-echo json_encode($challengeData);
+echo $challenge->toJson();
