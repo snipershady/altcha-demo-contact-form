@@ -1,71 +1,51 @@
 <?php
+declare(strict_types=1);
 
-require_once __DIR__.'/vendor/autoload.php';
+require_once __DIR__ . '/vendor/autoload.php';
 
-use AltchaOrg\Altcha\ServerSignature;
+use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
 
-$hmacKey = 'averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
+if (!defined('HMAC_KEY')) {
+    define('HMAC_KEY', 'altcha-v3-demo-secret-key-2024');
+}
 
-$requestMethod = filter_input(INPUT_SERVER, 'REQUEST_METHOD');
-if ('GET' === $requestMethod) {
+if ('POST' !== filter_input(INPUT_SERVER, 'REQUEST_METHOD')) {
     header('Location: indexv3.php');
     exit;
 }
 
-if ('POST' === $requestMethod) {
-    $altchaPayload = filter_input(INPUT_POST, 'altcha');
-    $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-    $message = filter_input(INPUT_POST, 'message', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$username = htmlspecialchars((string) filter_input(INPUT_POST, 'username', FILTER_DEFAULT), ENT_QUOTES, 'UTF-8');
+$password = htmlspecialchars((string) filter_input(INPUT_POST, 'password', FILTER_DEFAULT), ENT_QUOTES, 'UTF-8');
+$altchaRaw = filter_input(INPUT_POST, 'altcha');
 
-    if (empty($altchaPayload)) {
-        showResponse(false, 'Verifica di sicurezza non completata', 'Il widget Altcha non ha inviato la Server Signature. Per favore riprova.');
-        exit;
-    }
+$verified = false;
+$errorMsg = null;
 
+if (empty($altchaRaw)) {
+    $errorMsg = 'Verifica ALTCHA mancante. Completa il widget prima di inviare.';
+} else {
     try {
-        // v3: verifica la Server Signature prodotta da verifyv3.php
-        $verification = ServerSignature::verifyServerSignature($altchaPayload, $hmacKey);
-
-        if ($verification->verified) {
-            $data = $verification->verificationData;
-            showResponse(
-                true,
-                'Messaggio Inviato!',
-                'Grazie per averci contattato. Abbiamo ricevuto il tuo messaggio e ti risponderemo al più presto.',
-                $email,
-                $message,
-                $data['classification'] ?? '',
-                (float) ($data['score'] ?? 0.0),
-            );
-        } else {
-            http_response_code(400);
-            showResponse(false, 'Verifica Fallita', 'La verifica Server Signature non è andata a buon fine. Per favore riprova.');
+        $altcha = new AltchaV1(hmacKey: HMAC_KEY);
+        $verified = $altcha->verifySolution($altchaRaw);
+        if (!$verified) {
+            $errorMsg = 'Verifica ALTCHA non riuscita o challenge scaduta.';
         }
-    } catch (Exception) {
-        http_response_code(500);
-        showResponse(false, 'Errore del Server', 'Si è verificato un errore durante l\'elaborazione della richiesta.');
+    } catch (Throwable) {
+        $errorMsg = 'Errore durante la verifica ALTCHA.';
     }
 }
 
-function showResponse(
-    bool $success,
-    string $title,
-    string $message,
-    ?string $email = null,
-    ?string $userMessage = null,
-    string $classification = '',
-    float $score = 0.0,
-): void {
-    ?>
-    <!DOCTYPE html>
-    <html lang="it">
+if (!$verified) {
+    http_response_code(400);
+}
+?><!DOCTYPE html>
+<html lang="it">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title><?php echo htmlspecialchars($title); ?></title>
+        <title><?php echo $verified ? 'Accesso riuscito' : 'Accesso negato' ?> — ALTCHA Widget v3</title>
 
-        <!-- Bootstrap 5.3.3 CSS -->
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
 
         <style>
             body {
@@ -73,16 +53,15 @@ function showResponse(
                 min-height: 100vh;
                 display: flex;
                 align-items: center;
-                padding: 20px 0;
+                padding: 2rem 0;
             }
-            .response-container {
-                background: white;
-                border-radius: 15px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                padding: 40px;
-                max-width: 600px;
+            .card {
+                border: none;
+                border-radius: 1rem;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, .2);
+                max-width: 500px;
+                width: 100%;
                 margin: 0 auto;
-                text-align: center;
             }
             .icon-circle {
                 width: 80px;
@@ -91,106 +70,93 @@ function showResponse(
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin: 0 auto 20px;
-                font-size: 40px;
+                margin: 0 auto 1.25rem;
             }
             .icon-circle.success {
                 background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-                color: white;
             }
             .icon-circle.error {
                 background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
-                color: white;
             }
             .btn-back {
                 background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
                 border: none;
-                padding: 12px 40px;
+                color: #fff;
                 font-weight: 600;
-                color: white;
-                transition: transform 0.2s;
+                transition: transform .15s, box-shadow .15s;
             }
             .btn-back:hover {
+                color: #fff;
                 transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
-                color: white;
-            }
-            .message-preview {
-                background: #f8f9fa;
-                border-left: 4px solid #0288d1;
-                padding: 15px;
-                margin: 20px 0;
-                text-align: left;
-                border-radius: 5px;
-            }
-            .signature-data {
-                background: #e3f2fd;
-                border-left: 4px solid #4facfe;
-                padding: 12px 15px;
-                margin: 15px 0;
-                text-align: left;
-                border-radius: 5px;
-                font-size: 0.875rem;
+                box-shadow: 0 6px 18px rgba(79, 172, 254, .45);
             }
         </style>
     </head>
     <body>
+
         <div class="container">
-            <div class="response-container">
-                <div class="icon-circle <?php echo $success ? 'success' : 'error'; ?>">
-                    <?php if ($success) { ?>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
-                            <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
-                        </svg>
-                    <?php } else { ?>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" class="bi bi-x-circle-fill" viewBox="0 0 16 16">
-                            <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0M5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293z"/>
-                        </svg>
-                    <?php } ?>
-                </div>
+            <div class="card">
+                <div class="card-body p-4 p-md-5 text-center">
 
-                <h1 class="mb-3 <?php echo $success ? 'text-success' : 'text-danger'; ?>">
-                    <?php echo htmlspecialchars($title); ?>
-                </h1>
-
-                <p class="lead mb-4">
-                    <?php echo htmlspecialchars($message); ?>
-                </p>
-
-                <?php if ($success && $email && $userMessage) { ?>
-                    <div class="message-preview">
-                        <p class="mb-2"><strong>Email:</strong> <?php echo htmlspecialchars($email); ?></p>
-                        <p class="mb-0"><strong>Messaggio:</strong></p>
-                        <p class="text-muted"><?php echo nl2br(htmlspecialchars($userMessage)); ?></p>
+                    <div class="icon-circle <?php echo $verified ? 'success' : 'error' ?>">
+<?php if ($verified): ?>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="white" class="bi bi-check-lg" viewBox="0 0 16 16">
+                            <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/>
+                            </svg>
+<?php else: ?>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="white" class="bi bi-x-lg" viewBox="0 0 16 16">
+                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/>
+                            </svg>
+<?php endif; ?>
                     </div>
 
-                    <div class="signature-data">
-                        <p class="mb-1 fw-semibold text-primary">Dati dalla Server Signature v3:</p>
-                        <p class="mb-1">
-                            <strong>Classificazione:</strong>
-                            <?php echo htmlspecialchars($classification ?: 'n/d'); ?>
-                        </p>
-                        <p class="mb-0">
-                            <strong>Score:</strong>
-                            <?php echo number_format($score, 2); ?>
-                        </p>
-                    </div>
-                <?php } ?>
+<?php if ($verified): ?>
+                        <h3 class="fw-bold text-success mb-2">Accesso riuscito</h3>
+                        <p class="text-muted mb-4">La verifica ALTCHA è andata a buon fine.</p>
 
-                <div class="mt-4">
+                        <div class="text-start bg-light rounded p-3 mb-4 small">
+                            <div class="mb-1">
+                                <span class="fw-semibold">Username:</span>
+    <?php echo $username !== '' ? $username : '<em class="text-muted">non fornito</em>' ?>
+                            </div>
+                            <div>
+                                <span class="fw-semibold">Password:</span>
+    <?php echo $password !== '' ? str_repeat('•', max(6, mb_strlen($password))) : '<em class="text-muted">non fornita</em>' ?>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-success text-start small py-2 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shield-check me-1" viewBox="0 0 16 16">
+                            <path d="M5.338 1.59a61 61 0 0 0-2.837.856.48.48 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.7 10.7 0 0 0 2.287 2.233c.346.244.652.42.893.533q.18.085.293.118a1 1 0 0 0 .101.025 1 1 0 0 0 .1-.025q.114-.034.294-.118c.24-.113.547-.29.893-.533a10.7 10.7 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265 7.31 0 8 0s1.843.265 2.928.56l.01.003c1.117.315 2.218.667 2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787 7.795-2.465 9.99a11.8 11.8 0 0 1-2.517 2.453 7 7 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7 7 0 0 1-1.048-.625 11.8 11.8 0 0 1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0 0 1 2.185 1.43 63 63 0 0 1 5.072.56"/>
+                            <path d="M10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0"/>
+                            </svg>
+                            Verifica ALTCHA v3 completata con successo.
+                        </div>
+
+<?php else: ?>
+                        <h3 class="fw-bold text-danger mb-2">Accesso negato</h3>
+                        <p class="text-muted mb-4"><?php echo $errorMsg ?? 'Verifica ALTCHA non riuscita.' ?></p>
+
+                        <div class="alert alert-danger text-start small py-2 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-exclamation-triangle me-1" viewBox="0 0 16 16">
+                            <path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.15.15 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.2.2 0 0 1-.054.06.1.1 0 0 1-.066.017H1.146a.1.1 0 0 1-.066-.017.2.2 0 0 1-.054-.06.18.18 0 0 1 .002-.183L7.884 2.073a.15.15 0 0 1 .054-.057m1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767z"/>
+                            <path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0z"/>
+                            </svg>
+                            Completa il widget ALTCHA e riprova.
+                        </div>
+<?php endif; ?>
+
                     <a href="indexv3.php" class="btn btn-primary btn-lg btn-back">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-arrow-left me-2" viewBox="0 0 16 16">
-                            <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-arrow-left me-2 mb-1" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8"/>
                         </svg>
-                        Torna al Form
+                        Torna al form
                     </a>
+
                 </div>
             </div>
         </div>
 
-        <!-- Bootstrap 5.3.3 JS Bundle -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
     </body>
-    </html>
-    <?php
-}
+</html>
