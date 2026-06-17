@@ -44,7 +44,7 @@ if (empty($altchaRaw)) {
             );
             $payload = new Payload($challenge, $solution);
 
-            $difficulty = Pbkdf2Difficulty::HIGH;
+            $difficulty = Pbkdf2Difficulty::MEDIUM_HIGH;
 
             $altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW2);
             $result = $altcha->verifySolution(new VerifySolutionOptions(

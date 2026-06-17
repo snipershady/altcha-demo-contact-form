@@ -14,6 +14,7 @@ Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org
 - [Sequence diagram — Widget v3](#sequence-diagram--widget-v3)
 - [Sequence diagram — PoW Argon2id invisibile](#sequence-diagram--pow-argon2id-invisibile)
 - [Parametri di configurazione](#parametri-di-configurazione)
+- [Come il PoW limita i bot](#come-il-pow-limita-i-bot)
 - [Note di sicurezza](#note-di-sicurezza)
 
 ---
@@ -383,6 +384,22 @@ sequenceDiagram
 | `expiresAt` | `null` | Scadenza come `DateTimeImmutable` o timestamp Unix |
 | `parallelism` | `null` | Grado di parallelismo Argon2id |
 
+### Preset di difficoltà — `Pbkdf2Difficulty`
+
+L'enum `src/Enum/Pbkdf2Difficulty.php` definisce cinque livelli predefiniti basati su PBKDF2.
+Il lavoro totale per risoluzione è `cost × 256^keyPrefixLength` operazioni HMAC.
+
+| Livello       | cost    | keyPrefixLength | Algoritmo | Tentativi medi | Ops totali  |
+|---------------|---------|-----------------|-----------|----------------|-------------|
+| `LOW`         |  10.000 |        1        | SHA-256   |            256 |    ~2,56 M  |
+| `MEDIUM`      |  50.000 |        2        | SHA-384   |         65.536 |    ~3,28 B  |
+| `MEDIUM_HIGH` |  75.000 |        2        | SHA-512   |         65.536 |    ~4,92 B  |
+| `HIGH`        | 100.000 |        2        | SHA-512   |         65.536 |    ~6,55 B  |
+| `VERY_HIGH`   | 200.000 |        3        | SHA-512   |     16.777.216 |    ~3,36 T  |
+
+> `Ops totali` misura il **conteggio** delle derivazioni HMAC, indipendentemente dall'algoritmo.
+> L'algoritmo più pesante (SHA-512 vs SHA-256) incide sul tempo per operazione, non sul conteggio.
+
 ### Linee guida sulla difficoltà PoW
 
 | Caso d'uso | `keyPrefixLength` | Durata media browser |
@@ -390,6 +407,50 @@ sequenceDiagram
 | Anti-spam leggero | `1` | ~1–3 secondi |
 | Login protetto | `2` | ~10–30 secondi |
 | Registrazione ad alto rischio | `3` | ~3–10 minuti |
+
+---
+
+## Come il PoW limita i bot
+
+### Il principio: asimmetria computazionale
+
+Un sistema di Proof of Work impone al **client** di risolvere un puzzle computazionale prima che la sua richiesta venga accettata dal server. Il costo è distribuito in modo deliberatamente asimmetrico:
+
+| Operazione | Costo |
+|---|---|
+| Risolvere il puzzle (client) | Alto — decine di milioni di operazioni hash |
+| Verificare la soluzione (server) | Trascurabile — una singola derivazione |
+
+Il server non computa nulla finché il client non presenta una soluzione valida.
+
+### Perché penalizza i bot e non gli utenti
+
+Un utente umano carica la pagina una volta e aspetta pochi secondi che il widget risolva il PoW in background. Il costo è impercettibile.
+
+Un bot che vuole inondare un endpoint deve invece risolvere un puzzle per **ogni singola richiesta**. Con un livello `MEDIUM` (~3,28 miliardi di operazioni HMAC), un server da 4 core capace di eseguire 10.000 derivazioni/secondo impiegherebbe circa **9 ore di CPU** per generare un milione di richieste valide. Lo stesso volume, senza PoW, richiederebbe frazioni di secondo.
+
+```
+Senza PoW:  1.000.000 richieste/ora  →  triviale
+Con PoW:    1.000.000 richieste/ora  →  richiede ~9.000 core-hour di CPU
+```
+
+### Differenza rispetto ad altri meccanismi
+
+| Meccanismo | Esperienza utente | Efficacia anti-bot | Privacy |
+|---|---|---|---|
+| CAPTCHA visivo | Interazione richiesta, spesso frustrante | Media (aggirabile con ML o farm umane) | Dipende dal provider |
+| Rate limiting IP | Nessuna | Bassa (VPN, botnet distribuiti) | Nessun impatto |
+| Proof of Work | Nessuna (widget invisibile) | Alta per attacchi volumetrici | Nessun dato trasmesso a terzi |
+
+### Limiti del PoW
+
+Il PoW **non è una difesa assoluta**:
+
+- **Botnet distribuite**: se i bot sono distribuiti su migliaia di macchine, il costo per nodo si riduce proporzionalmente.
+- **Hardware dedicato**: GPU e ASIC possono accelerare certi algoritmi. PBKDF2 e Argon2id sono progettati per resistere, ma non sono immuni.
+- **Nonce reuse**: senza uno store dei nonce già verificati, la stessa soluzione può essere riutilizzata entro la scadenza della challenge. Vedere [Note di sicurezza](#note-di-sicurezza).
+
+Il PoW è efficace per **alzare il costo economico** degli attacchi volumetrici, non per eliminarli. Va combinato con rate limiting, validazione dell'input e monitoraggio del traffico.
 
 ---
 

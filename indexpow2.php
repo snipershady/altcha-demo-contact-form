@@ -10,7 +10,7 @@ use Shady\Altcha\Enum\Pbkdf2Difficulty;
 
 const HMAC_KEY_POW2 = 'altcha-pow-pbkdf2-demo-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
-$difficulty = Pbkdf2Difficulty::HIGH;
+$difficulty = Pbkdf2Difficulty::MEDIUM_HIGH;
 
 $altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_POW2);
 $challenge = $altcha->createChallenge(new CreateChallengeOptions(
