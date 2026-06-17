@@ -435,13 +435,48 @@ Senza PoW:  1.000.000 richieste/ora  →  triviale
 Con PoW:    1.000.000 richieste/ora  →  richiede ~9.000 core-hour di CPU
 ```
 
+### Il checkbox "sono un essere umano" blocca i bot?
+
+No. Il checkbox è un elemento UX, non un meccanismo di sicurezza.
+
+Il PoW viene risolto da JavaScript nel browser: un bot non deve "cliccare" nel senso umano — Puppeteer, Playwright e Selenium simulano un click in una riga di codice, dopodiché il widget esegue esattamente lo stesso JavaScript che esegue un utente reale.
+
+Un bot sofisticato può inoltre bypassare completamente il widget:
+
+```
+Bot naïve:      load page → click checkbox → wait PoW → submit
+Bot sofisticato: fetch challenge JSON → risolve PoW lato server → POST diretto
+```
+
+Nel secondo caso non serve nemmeno un browser: il bot chiama direttamente l'endpoint di generazione challenge, risolve il puzzle con la stessa matematica, e fa il POST. Con o senza checkbox, la protezione rimane esclusivamente economica — il costo computazionale per richiesta.
+
 ### Differenza rispetto ad altri meccanismi
 
-| Meccanismo | Esperienza utente | Efficacia anti-bot | Privacy |
+| Meccanismo | Esperienza utente | Protezione effettiva | Privacy |
 |---|---|---|---|
-| CAPTCHA visivo | Interazione richiesta, spesso frustrante | Media (aggirabile con ML o farm umane) | Dipende dal provider |
-| Rate limiting IP | Nessuna | Bassa (VPN, botnet distribuiti) | Nessun impatto |
-| Proof of Work | Nessuna (widget invisibile) | Alta per attacchi volumetrici | Nessun dato trasmesso a terzi |
+| PoW invisibile (ALTCHA) | Nessuna | Rate limiting computazionale | Nessun dato trasmesso a terzi |
+| PoW con checkbox (ALTCHA) | Click simulabile in 1 riga | Rate limiting computazionale | Nessun dato trasmesso a terzi |
+| reCAPTCHA v3 | Nessuna | Rate limiting + analisi comportamentale ML | Dati inviati a Google |
+| CAPTCHA visivo classico | Interazione richiesta | Rate limiting + riconoscimento immagini | Dipende dal provider |
+| Rate limiting IP | Nessuna | Bassa (aggirabile con VPN/proxy) | Nessun impatto |
+
+Il vantaggio di ALTCHA rispetto a reCAPTCHA non è una protezione maggiore — è la **privacy**: nessun dato inviato a Google, nessun cookie di tracciamento. Il trade-off è che la protezione è solo economica, non comportamentale.
+
+### Il PoW come rate limiter naturale
+
+Il PoW **non blocca** un bot lento: lo rallenta. Un bot con poca CPU risolverà comunque ogni challenge, ma ci metterà più tempo — e questo limita naturalmente il numero di richieste che riesce a inviare.
+
+Con un livello `MEDIUM` (~3,28 B ops), il throughput massimo dipende dalla potenza del client:
+
+| Client | Tempo per challenge | Richieste/ora massime |
+|---|---|---|
+| Browser moderno | ~2 secondi | ~1.800 |
+| Bot CPU low-end | ~30 secondi | ~120 |
+| Bot CPU high-end | ~1 secondo | ~3.600 |
+
+Il PoW trasforma il rate limiting da un problema **tuo** (quante richieste accetto?) a un problema **loro** (quanta CPU hanno?). Il throughput del bot è capped dall'algoritmo, non dalla tua logica applicativa.
+
+Un rate limit classico a 10 req/ora è facile da aggirare ruotando IP o proxy. Un PoW che fisicamente richiede 30 secondi per richiesta è molto più difficile da scalare senza investire in hardware.
 
 ### Limiti del PoW
 
