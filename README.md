@@ -15,6 +15,7 @@ Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org
 - [Sequence diagram — PoW Argon2id invisibile](#sequence-diagram--pow-argon2id-invisibile)
 - [Parametri di configurazione](#parametri-di-configurazione)
 - [Come il PoW limita i bot](#come-il-pow-limita-i-bot)
+- [Scelta dell'algoritmo: PBKDF2 vs Argon2id](#scelta-dellalgoritmo-pbkdf2-vs-argon2id)
 - [Note di sicurezza](#note-di-sicurezza)
 
 ---
@@ -451,6 +452,54 @@ Il PoW **non è una difesa assoluta**:
 - **Nonce reuse**: senza uno store dei nonce già verificati, la stessa soluzione può essere riutilizzata entro la scadenza della challenge. Vedere [Note di sicurezza](#note-di-sicurezza).
 
 Il PoW è efficace per **alzare il costo economico** degli attacchi volumetrici, non per eliminarli. Va combinato con rate limiting, validazione dell'input e monitoraggio del traffico.
+
+---
+
+## Scelta dell'algoritmo: PBKDF2 vs Argon2id
+
+### La differenza fondamentale: CPU-bound vs memory-hard
+
+**PBKDF2** è *CPU-bound*: il costo scala con le iterazioni (`cost`), ma ogni iterazione usa pochissima RAM. Questo lo rende facilmente parallelizzabile su GPU e ASIC, che possono eseguire migliaia di derivazioni in parallelo a basso costo energetico.
+
+**Argon2id** è *memory-hard*: ogni derivazione occupa un blocco di RAM (`memoryCost`). Le GPU hanno molta potenza di calcolo ma poca RAM per core — un RTX 4090 ha 24 GB totali ma centinaia di core che devono condividerla. Con `memoryCost=64MB`, possono girare al massimo ~375 derivazioni in parallelo su quella GPU. L'effetto parallelizzazione crolla.
+
+### Tabella comparativa
+
+| Criterio | PBKDF2 | Argon2id |
+|---|---|---|
+| Resistenza GPU/ASIC | Bassa | Alta |
+| RAM richiesta per operazione | ~KB | Configurabile (MB) |
+| Supporto nativo browser | Sì (Web Crypto API) | No (richiede WASM) |
+| Complessità di configurazione | 1 parametro (`cost`) | 3 parametri (`cost`, `memoryCost`, `parallelism`) |
+| Prevedibilità su mobile | Alta | Variabile — RAM limitata |
+| Standard | RFC 2898 | RFC 9106, vincitore PHC 2015 |
+
+### Quando scegliere PBKDF2
+
+- Il threat model sono **bot con CPU comuni** (server low-cost, VM cloud) — non GPU farm
+- Serve **massima compatibilità** (nessun WASM, nessuna dipendenza aggiuntiva nel browser)
+- Il PoW deve girare su **dispositivi mobili** con RAM limitata senza rischio OOM
+- Vuoi controllare la difficoltà con un solo parametro (`cost`) in modo lineare e prevedibile
+
+In questo progetto `Pbkdf2Difficulty` copre esattamente questo caso: la difficoltà è scalata via `cost` + `keyPrefixLength`, con SHA-384/SHA-512 per rallentare le iterazioni lato hardware.
+
+### Quando scegliere Argon2id
+
+- Il threat model include **botnet con GPU** o hardware specializzato
+- Puoi accettare la complessità aggiuntiva (WASM worker, Blob URL, tre parametri da bilanciare)
+- Il PoW gira principalmente su **desktop** con RAM abbondante
+- Vuoi la massima resistenza per endpoint ad alto rischio (es. registrazione, reset password)
+
+### Regola pratica
+
+| Scenario | Algoritmo consigliato |
+|---|---|
+| Bot economici (cloud VM, CPU comuni) | PBKDF2 `HIGH` o `VERY_HIGH` |
+| Bot con GPU farm | Argon2id, `memoryCost` ≥ 32 MB |
+| Mobile-first, bassa latenza | PBKDF2 `LOW` o `MEDIUM` |
+| Massima sicurezza, utenza desktop | Argon2id, `memoryCost` ≥ 64 MB |
+
+Questo progetto implementa entrambi: PBKDF2 tramite `Pbkdf2Difficulty` e Argon2id in `indexpow.php`. È possibile scegliere l'algoritmo per singolo endpoint in base al livello di rischio specifico.
 
 ---
 
