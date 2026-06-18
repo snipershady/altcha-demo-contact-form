@@ -17,7 +17,7 @@
             border: none;
             border-radius: 1rem;
             box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
-            max-width: 860px;
+            max-width: 920px;
             width: 100%;
             margin: 0 auto;
         }
@@ -67,25 +67,32 @@
             </div>
             <div class="card-body">
                 <div class="row g-4">
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <a href="indexpow.php" class="demo-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff;">
                             <h5><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-cpu-fill me-1" viewBox="0 0 16 16"><path d="M6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5z"/><path d="M5.5.5a.5.5 0 0 0-1 0V2A2.5 2.5 0 0 0 2 4.5H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2v1H.5a.5.5 0 0 0 0 1H2A2.5 2.5 0 0 0 4.5 12v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12h1v1.5a.5.5 0 0 0 1 0V12a2.5 2.5 0 0 0 2.5-2.5h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13v-1h1.5a.5.5 0 0 0 0-1H13A2.5 2.5 0 0 0 10.5 2V.5a.5.5 0 0 0-1 0V2h-1V.5a.5.5 0 0 0-1 0V2h-1zm1 4.5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3A1.5 1.5 0 0 1 6.5 5"/></svg>
                             PoW Argon2id</h5>
                             <p>Proof of Work con Argon2id via ALTCHA 3.x — worker cross-origin</p>
                         </a>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <a href="indexpow2.php" class="demo-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff;">
                             <h5><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-key-fill me-1" viewBox="0 0 16 16"><path d="M3.5 11.5a3.5 3.5 0 1 1 3.163-5H14L15.5 8 14 9.5l-1-1-1 1-1-1-1 1-1-1-1.037 1.004A3.5 3.5 0 0 1 3.5 11.5m2.5 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0"/></svg>
-                            PoW PBKDF2</h5>
-                            <p>Proof of Work con PBKDF2/SHA-256 via ALTCHA 3.x — WebCrypto nativo</p>
+                            PoW PBKDF2 — Form</h5>
+                            <p>Proof of Work con PBKDF2/SHA-256, verifica lato server al submit del form</p>
                         </a>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <a href="indexv3.php" class="demo-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff;">
                             <h5><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-shield-lock-fill me-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 9.99a11.8 11.8 0 0 0 2.517 2.453c.386.273.744.482 1.048.625.28.132.581.24.829.24s.548-.108.829-.24a7 7 0 0 0 1.048-.625 11.8 11.8 0 0 0 2.517-2.453c1.678-2.195 3.061-5.513 2.465-9.99a1.54 1.54 0 0 0-1.044-1.263 62.5 62.5 0 0 0-2.887-.87C9.843.266 8.69 0 8 0m0 5a1.5 1.5 0 0 1 .5 2.915l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99A1.5 1.5 0 0 1 8 5"/></svg>
                             Widget v3</h5>
                             <p>ALTCHA Widget v3 classico — checkbox "Non sono un robot"</p>
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="indexpownoform.php" class="demo-card" style="background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); color: #fff; border: 1px solid rgba(233,69,96,.35);">
+                            <h5><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-cursor-fill me-1" viewBox="0 0 16 16"><path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z"/></svg>
+                            PoW PBKDF2 — CTA senza form</h5>
+                            <p>Proof of Work con PBKDF2, verifica via <code style="color:#f5a623">fetch()</code> al click di una CTA — risposta JSON inline, nessun form</p>
                         </a>
                     </div>
                 </div>

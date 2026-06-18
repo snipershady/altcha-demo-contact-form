@@ -11,8 +11,10 @@ Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org
 - [Struttura del progetto](#struttura-del-progetto)
 - [Integrazione 1 — Widget v3 visibile (SHA-256)](#integrazione-1--widget-v3-visibile-sha-256)
 - [Integrazione 2 — Widget PoW invisibile (Argon2id)](#integrazione-2--widget-pow-invisibile-argon2id)
+- [Integrazione 3 — PoW PBKDF2 invisibile senza form (fetch + JSON)](#integrazione-3--pow-pbkdf2-invisibile-senza-form-fetch--json)
 - [Sequence diagram — Widget v3](#sequence-diagram--widget-v3)
 - [Sequence diagram — PoW Argon2id invisibile](#sequence-diagram--pow-argon2id-invisibile)
+- [Sequence diagram — PoW PBKDF2 senza form](#sequence-diagram--pow-pbkdf2-senza-form)
 - [Parametri di configurazione](#parametri-di-configurazione)
 - [Come il PoW limita i bot](#come-il-pow-limita-i-bot)
 - [Scelta dell'algoritmo: PBKDF2 vs Argon2id](#scelta-dellalgoritmo-pbkdf2-vs-argon2id)
@@ -52,10 +54,14 @@ La libreria `altcha-org/altcha ^2.0` viene installata tramite Composer. Non sono
 
 ```
 .
-├── indexv3.php       # Form con widget ALTCHA v3 visibile (SHA-256)
-├── actionv3.php      # Verifica server-side challenge v3
-├── indexpow.php      # Form con widget ALTCHA PoW invisibile (Argon2id)
-├── actionpow.php     # Verifica server-side challenge Argon2id
+├── indexv3.php            # Form con widget ALTCHA v3 visibile (SHA-256)
+├── actionv3.php           # Verifica server-side challenge v3
+├── indexpow.php           # Form con widget ALTCHA PoW invisibile (Argon2id)
+├── actionpow.php          # Verifica server-side challenge Argon2id
+├── indexpow2.php          # Form con widget ALTCHA PoW invisibile (PBKDF2)
+├── actionpow2.php         # Verifica server-side challenge PBKDF2
+├── indexpownoform.php     # CTA senza form — PoW PBKDF2 invisibile, invio via fetch()
+├── actionpownoform.php    # Verifica server-side PBKDF2, risponde in JSON
 ├── composer.json
 └── vendor/
     └── altcha-org/altcha/   # Libreria PHP ALTCHA v2.0.x
@@ -274,6 +280,159 @@ $verified = $result->verified;
 
 ---
 
+## Integrazione 3 — PoW PBKDF2 invisibile senza form (XHR + SweetAlert2)
+
+**File:** `indexpownoform.php` + `actionpownoform.php`
+
+### Come funziona
+
+Stesso algoritmo PBKDF2, ma senza alcun elemento `<form>` e con un flusso a due fasi ben distinte:
+
+1. **Fase 1 — verifica automatica:** il widget risolve il PoW in background; quando emette `verified`, il JS invia immediatamente il payload al server via XHR. La CTA rimane disabilitata finché il server non risponde `ok: true`.
+2. **Fase 2 — azione utente:** solo dopo la conferma server il bottone si abilita. Il click non invia nulla: mostra esclusivamente un alert SweetAlert2.
+
+La verifica avviene quindi **prima** che l'utente possa interagire con la CTA, e il click è un'azione pura di UI, già "garantita" dal server.
+
+Questo pattern è utile per proteggere azioni puntuali (download, accesso a risorsa, invocazione API) che non corrispondono a un form HTML tradizionale.
+
+### Generazione della challenge (indexpownoform.php)
+
+```php
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\CreateChallengeOptions;
+use Shady\Altcha\Enum\Pbkdf2Difficulty;
+
+const HMAC_KEY_POWNOFORM = '...';
+
+$difficulty       = Pbkdf2Difficulty::LOW;   // configurabile: LOW → VERY_HIGH
+$altcha           = new Altcha(hmacSignatureSecret: HMAC_KEY_POWNOFORM);
+$challenge        = $altcha->createChallenge(new CreateChallengeOptions(
+    algorithm:       new Pbkdf2($difficulty->hmacAlgorithm()),
+    cost:            $difficulty->cost(),
+    keyPrefixLength: $difficulty->keyPrefixLength(),
+    expiresAt:       new DateTimeImmutable('+10 minutes'),
+));
+$challengeJsonRaw = $challenge->toJson();
+```
+
+### Widget e CTA HTML
+
+Il widget non ha l'attributo `name` (inutile senza form). Il bottone parte disabilitato.
+
+```html
+<!-- SweetAlert2 deve essere caricato prima del modulo altcha -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.0.10/dist/main/altcha.min.js"></script>
+
+<altcha-widget
+    id="altchaWidget"
+    display="invisible"
+    auto="onload"
+    challenge="<?php echo htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8'); ?>">
+</altcha-widget>
+
+<p id="powStatus">
+    <!-- aggiornato via JS -->
+</p>
+
+<button type="button" id="ctaBtn" disabled>
+    Accedi ai contenuti
+</button>
+```
+
+### Logica JavaScript
+
+Il JS è strutturato in due blocchi indipendenti che rispecchiano le due fasi del flusso.
+
+```javascript
+const widget    = document.getElementById('altchaWidget');
+const powStatus = document.getElementById('powStatus');
+const ctaBtn    = document.getElementById('ctaBtn');
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function setStatus(text, type = 'neutral') {
+    powStatus.textContent = text;
+    // applica classe CSS success / error / neutral
+}
+
+async function verifyWithServer(payload) {
+    const body = new FormData();
+    body.append('altcha', payload);
+    const response = await fetch('actionpownoform.php', { method: 'POST', body });
+    return response.json();   // { ok: bool, error: string|null }
+}
+
+// ─── Fase 1: PoW completato → verifica lato server via XHR ──────────────────
+
+widget.addEventListener('verified', async function (event) {
+    const payload = event.detail?.payload;
+
+    setStatus('Verifica server in corso…', 'loading');
+
+    try {
+        const result = await verifyWithServer(payload);
+
+        if (result.ok) {
+            setStatus('✓ Challenge superata — puoi procedere.', 'success');
+            ctaBtn.disabled = false;
+        } else {
+            setStatus('✗ ' + (result.error ?? 'Verifica fallita.'), 'error');
+        }
+    } catch (err) {
+        setStatus('✗ Errore di rete. Ricarica la pagina.', 'error');
+    }
+});
+
+widget.addEventListener('error', function () {
+    setStatus('✗ PoW fallito. Ricarica la pagina.', 'error');
+});
+
+// ─── Fase 2: CTA cliccata → SweetAlert2 (nessun fetch aggiuntivo) ────────────
+
+ctaBtn.addEventListener('click', function () {
+    Swal.fire({
+        title: 'Challenge superata e CTA cliccata',
+        icon: 'success',
+    });
+});
+```
+
+> **Perché `event.detail.payload` e non `widget.value`?**
+> Fuori da un `<form>`, `widget.value` è una proprietà interna del web component non garantita come interfaccia pubblica stabile — in certi browser/versioni può risultare `undefined`. `event.detail.payload` è il canale ufficiale per leggere il payload in modo programmatico: emesso direttamente nell'evento `verified`, viene catturato nel momento esatto in cui è disponibile, senza dipendenze da timing o da proprietà del DOM.
+
+### Verifica server-side e risposta JSON (actionpownoform.php)
+
+L'action non produce HTML: risponde sempre con JSON e imposta HTTP 400 in caso di fallimento.
+
+```php
+header('Content-Type: application/json; charset=UTF-8');
+
+if ('POST' !== filter_input(INPUT_SERVER, 'REQUEST_METHOD')) {
+    http_response_code(405);
+    echo json_encode(['ok' => false, 'error' => 'Metodo non consentito.']);
+    exit;
+}
+
+// ... decode e verifica identiche a actionpow2.php ...
+
+if (!$verified) {
+    http_response_code(400);
+}
+
+echo json_encode(['ok' => $verified, 'error' => $errorMsg]);
+```
+
+Struttura della risposta:
+
+| Campo   | Tipo           | Descrizione                                              |
+|---------|----------------|----------------------------------------------------------|
+| `ok`    | `bool`         | `true` se la challenge è valida e non scaduta            |
+| `error` | `string\|null` | Messaggio di errore leggibile; `null` se verificato      |
+
+---
+
 ## Sequence diagram — Widget v3
 
 ```mermaid
@@ -357,6 +516,50 @@ sequenceDiagram
         S-->>B: HTTP 200 — Accesso riuscito
     else Verifica fallita / scaduta
         S-->>B: HTTP 400 — Accesso negato<br/>(expired / invalidSignature / wrong solution)
+    end
+```
+
+---
+
+## Sequence diagram — PoW PBKDF2 senza form
+
+```mermaid
+sequenceDiagram
+    actor U as Utente
+    participant B as Browser
+    participant S as Server PHP
+    participant CDN as CDN jsDelivr
+
+    U->>B: GET indice (indexpownoform.php)
+    B->>S: HTTP GET /indexpownoform.php
+    S->>S: Altcha::createChallenge()<br/>(Pbkdf2/LOW, exp=+10min)
+    S-->>B: HTML con challenge JSON inline<br/>+ altcha-widget invisible/auto=onload<br/>+ button#ctaBtn disabled
+
+    B->>CDN: Carica altcha@3 + SweetAlert2
+    CDN-->>B: Bundle altcha@3 (PBKDF2 via WebCrypto nativo) + Swal
+
+    B->>B: Widget montato<br/>PoW PBKDF2 avviato in background
+
+    Note over U,B: Fase 1 — automatica, nessuna interazione utente
+
+    B->>B: PoW completato<br/>evento "verified" → event.detail.payload
+
+    B->>B: setStatus('Verifica server in corso…')
+    B->>S: HTTP POST /actionpownoform.php<br/>FormData { altcha: event.detail.payload }
+
+    S->>S: base64_decode → json_decode<br/>ChallengeParameters::fromArray()<br/>new Challenge / Solution / Payload<br/>Altcha::verifySolution() — HMAC + PBKDF2 + scadenza
+
+    alt Verifica OK
+        S-->>B: HTTP 200 {"ok":true,"error":null}
+        B->>B: setStatus('✓ Challenge superata', 'success')<br/>ctaBtn.disabled = false
+
+        Note over U,B: Fase 2 — interazione utente
+
+        U->>B: Click CTA "Accedi ai contenuti"
+        B->>B: Swal.fire('Challenge superata e CTA cliccata')<br/>(nessun fetch aggiuntivo)
+    else Verifica fallita / scaduta
+        S-->>B: HTTP 400 {"ok":false,"error":"..."}
+        B->>B: setStatus('✗ [errore]', 'error')<br/>CTA rimane disabilitata
     end
 ```
 
