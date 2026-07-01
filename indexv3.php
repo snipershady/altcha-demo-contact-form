@@ -3,24 +3,25 @@ declare(strict_types=1);
 
 require_once __DIR__.'/vendor/autoload.php';
 
-use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
-use AltchaOrg\Altcha\V1\ChallengeOptions;
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\CreateChallengeOptions;
+use Shady\Altcha\Enum\Pbkdf2Difficulty;
 
 const HMAC_KEY = 'altcha-v3-demo-secret-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
-$altcha = new AltchaV1(hmacKey: HMAC_KEY);
-$challenge = $altcha->createChallenge(new ChallengeOptions(
-    maxNumber: 100000,
-    expires: new DateTimeImmutable('+5 minutes'),
-));
+// LOW: checkbox visibile, l'utente clicca e attende — deve risolvere in < 1s.
+// Per PoW invisibile/in background (vedi indexpow2.php) si può salire a MEDIUM/HIGH.
+$difficulty = Pbkdf2Difficulty::LOW;
 
-$challengeJson = htmlspecialchars(json_encode([
-    'algorithm' => $challenge->algorithm,
-    'challenge' => $challenge->challenge,
-    'maxnumber' => $challenge->maxNumber,
-    'salt' => $challenge->salt,
-    'signature' => $challenge->signature,
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY);
+$challenge = $altcha->createChallenge(new CreateChallengeOptions(
+    algorithm: new Pbkdf2($difficulty->hmacAlgorithm()),
+    cost: $difficulty->cost(),
+    keyPrefixLength: $difficulty->keyPrefixLength(),
+    expiresAt: new DateTimeImmutable('+2 minutes'),
+));
+$challengeJsonRaw = $challenge->toJson();
 ?>
 
 <!DOCTYPE html>
@@ -31,7 +32,17 @@ $challengeJson = htmlspecialchars(json_encode([
         <title>Login Demo — ALTCHA Widget v3</title>
 
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-        <script async defer src="https://cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js" type="module"></script>
+
+        <!--
+            Widget e traduzione italiana caricati da CDN npm pinnata (v3.1.0), non dal
+            branch git non pinnato. I due <script type="module"> vengono eseguiti in
+            ordine di documento: prima il widget registra window.$altcha, poi il file
+            i18n/it.js vi inserisce le stringhe italiane (label, footer, errori, ecc.).
+            Senza questo secondo import, il widget mostra le stringhe di default in
+            inglese anche con <html lang="it">.
+        -->
+        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/main/altcha.min.js"></script>
+        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/i18n/it.js"></script>
 
         <style>
             body {
@@ -82,11 +93,11 @@ $challengeJson = htmlspecialchars(json_encode([
                         </svg>
                         Login Demo
                     </h4>
-                    <small class="opacity-75">Protetto da ALTCHA Widget v3</small>
+                    <small class="opacity-75">Protetto da ALTCHA Widget v3 — PoW PBKDF2/<?php echo htmlspecialchars($difficulty->hmacAlgorithm()->value, ENT_QUOTES, 'UTF-8'); ?></small>
                 </div>
 
                 <div class="card-body">
-                    <form action="actionv3.php" method="POST" novalidate>
+                    <form action="actionv3.php" method="POST">
 
                         <div class="mb-3">
                             <label for="username" class="form-label fw-semibold">Username</label>
@@ -114,13 +125,14 @@ $challengeJson = htmlspecialchars(json_encode([
 
                         <div class="mb-4 d-flex justify-content-center">
                             <altcha-widget
-                                challengejson="<?php echo $challengeJson; ?>"
-                                strings='{"error":"Errore di verifica.","expired":"Verifica scaduta, ricarica la pagina.","footer":"Protetto da <a href=\"https://altcha.org\" target=\"_blank\">ALTCHA</a>","label":"Non sono un robot","verified":"Verificato","verifying":"Verifica in corso...","waitAlert":"Attendi..."}'>
+                                id="altchaWidget"
+                                challenge="<?php echo htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8'); ?>"
+                                name="altcha">
                             </altcha-widget>
                         </div>
 
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-submit btn-lg">
+                            <button type="submit" class="btn btn-primary btn-submit btn-lg" id="submitBtn" disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-box-arrow-in-right me-2 mb-1" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M6 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 0-1 0v2A1.5 1.5 0 0 0 6.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-8A1.5 1.5 0 0 0 5 3.5v2a.5.5 0 0 0 1 0z"/>
                                 <path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H1.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z"/>
@@ -135,5 +147,25 @@ $challengeJson = htmlspecialchars(json_encode([
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            (function () {
+                // Il pulsante resta disabilitato finché il widget non è nello stato
+                // "verified": in modalità standard il widget espone anche un checkbox
+                // required nativo, ma il gate esplicito qui non dipende dalla
+                // validazione HTML5 e blocca il submit in ogni caso.
+                const widget = document.getElementById('altchaWidget');
+                const submitBtn = document.getElementById('submitBtn');
+
+                widget.addEventListener('verified', function () {
+                    submitBtn.disabled = false;
+                });
+
+                widget.addEventListener('statechange', function (ev) {
+                    if (ev.detail?.state !== 'verified') {
+                        submitBtn.disabled = true;
+                    }
+                });
+            })();
+        </script>
     </body>
 </html>
