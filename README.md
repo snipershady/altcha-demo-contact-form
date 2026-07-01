@@ -1,6 +1,6 @@
 # ALTCHA Demo — Integrazioni PHP
 
-Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org/) in PHP, con widget frontend e verifica server-side.
+Demo di quattro strategie di integrazione della libreria [ALTCHA](https://altcha.org/) in PHP: dal widget frontend visibile alla verifica server-side pura, senza pagina né browser.
 
 ---
 
@@ -9,12 +9,14 @@ Demo di due strategie di integrazione della libreria [ALTCHA](https://altcha.org
 - [Requisiti](#requisiti)
 - [Installazione](#installazione)
 - [Struttura del progetto](#struttura-del-progetto)
-- [Integrazione 1 — Widget v3 visibile (SHA-256)](#integrazione-1--widget-v3-visibile-sha-256)
+- [Integrazione 1 — Widget v3 visibile (PBKDF2)](#integrazione-1--widget-v3-visibile-pbkdf2)
 - [Integrazione 2 — Widget PoW invisibile (Argon2id)](#integrazione-2--widget-pow-invisibile-argon2id)
-- [Integrazione 3 — PoW PBKDF2 invisibile senza form (fetch + JSON)](#integrazione-3--pow-pbkdf2-invisibile-senza-form-fetch--json)
+- [Integrazione 3 — PoW PBKDF2 invisibile senza form (XHR + SweetAlert2)](#integrazione-3--pow-pbkdf2-invisibile-senza-form-xhr--sweetalert2)
+- [Integrazione 4 — Backend puro, nessun frontend (challengebe.php + indexbe.php)](#integrazione-4--backend-puro-nessun-frontend-challengebephp--indexbephp)
 - [Sequence diagram — Widget v3](#sequence-diagram--widget-v3)
 - [Sequence diagram — PoW Argon2id invisibile](#sequence-diagram--pow-argon2id-invisibile)
 - [Sequence diagram — PoW PBKDF2 senza form](#sequence-diagram--pow-pbkdf2-senza-form)
+- [Sequence diagram — Backend puro (client headless)](#sequence-diagram--backend-puro-client-headless)
 - [Parametri di configurazione](#parametri-di-configurazione)
 - [Come il PoW limita i bot](#come-il-pow-limita-i-bot)
 - [Scelta dell'algoritmo: PBKDF2 vs Argon2id](#scelta-dellalgoritmo-pbkdf2-vs-argon2id)
@@ -54,7 +56,7 @@ La libreria `altcha-org/altcha ^2.0` viene installata tramite Composer. Non sono
 
 ```
 .
-├── indexv3.php            # Form con widget ALTCHA v3 visibile (SHA-256)
+├── indexv3.php            # Form con widget ALTCHA v3 visibile (PBKDF2, API V2)
 ├── actionv3.php           # Verifica server-side challenge v3
 ├── indexpow.php           # Form con widget ALTCHA PoW invisibile (Argon2id)
 ├── actionpow.php          # Verifica server-side challenge Argon2id
@@ -62,6 +64,11 @@ La libreria `altcha-org/altcha ^2.0` viene installata tramite Composer. Non sono
 ├── actionpow2.php         # Verifica server-side challenge PBKDF2
 ├── indexpownoform.php     # CTA senza form — PoW PBKDF2 invisibile, invio via fetch()
 ├── actionpownoform.php    # Verifica server-side PBKDF2, risponde in JSON
+├── challengebe.php        # Endpoint GET — emette una challenge PBKDF2 in JSON (no HTML)
+├── indexbe.php            # Endpoint POST — verifica la soluzione, poi esegue il codice protetto
+├── do_challenge.php       # Client di esempio (CLI): risolve la PoW senza browser/frontend
+├── src/
+│   └── Enum/Pbkdf2Difficulty.php   # Preset di difficoltà PBKDF2 condivisi da tutte le integrazioni
 ├── composer.json
 └── vendor/
     └── altcha-org/altcha/   # Libreria PHP ALTCHA v2.0.x
@@ -69,73 +76,125 @@ La libreria `altcha-org/altcha ^2.0` viene installata tramite Composer. Non sono
 
 ---
 
-## Integrazione 1 — Widget v3 visibile (SHA-256)
+## Integrazione 1 — Widget v3 visibile (PBKDF2)
 
 **File:** `indexv3.php` + `actionv3.php`
 
+> Questa integrazione usava in origine l'API V1 (hash SHA-256) e l'attributo widget `challengejson`. È stata migrata all'API V2 (PBKDF2) per restare allineata al resto del progetto — vedi [Note di migrazione da V1](#note-di-migrazione-da-v1-cosa-non-rifare) più sotto per i due bug che questa migrazione ha corretto.
+
 ### Come funziona
 
-Il server genera una challenge SHA-256 tramite l'API V1 della libreria. Il widget viene reso nel form come checkbox "Non sono un robot": l'utente risolve il PoW cliccando, dopodiché può inviare il form. Il server verifica la soluzione in `actionv3.php`.
+Il server genera una challenge PBKDF2 tramite l'API V2 della libreria (`Pbkdf2Difficulty::LOW`: risolvibile in meno di un secondo). Il widget viene reso nel form come checkbox "Non sono un robot": l'utente clicca, il browser risolve il PoW, e solo a quel punto il pulsante "Accedi" — disabilitato di default — viene abilitato via JavaScript. Il server verifica la soluzione in `actionv3.php`.
 
 ### Generazione della challenge (indexv3.php)
 
 ```php
-use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
-use AltchaOrg\Altcha\V1\ChallengeOptions;
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\CreateChallengeOptions;
+use Shady\Altcha\Enum\Pbkdf2Difficulty;
 
 const HMAC_KEY = 'altcha-v3-demo-secret-key-averelaquintaelementarenonèuntraguardomaunpiccoloebanalepuntodipartenza';
 
-$altcha = new AltchaV1(hmacKey: HMAC_KEY);
-$challenge = $altcha->createChallenge(new ChallengeOptions(
-    maxNumber: 100000,
-    expires: new DateTimeImmutable('+5 minutes'),
+// LOW: checkbox visibile, l'utente clicca e attende — deve risolvere in < 1s.
+// Per PoW invisibile/in background si può salire a MEDIUM/HIGH (vedi indexpow2.php).
+$difficulty = Pbkdf2Difficulty::LOW;
+
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY);
+$challenge = $altcha->createChallenge(new CreateChallengeOptions(
+    algorithm: new Pbkdf2($difficulty->hmacAlgorithm()),
+    cost: $difficulty->cost(),
+    keyPrefixLength: $difficulty->keyPrefixLength(),
+    expiresAt: new DateTimeImmutable('+2 minutes'),
 ));
-```
-
-La challenge viene serializzata in JSON nel formato flat atteso dal widget v3:
-
-```php
-$challengeJson = htmlspecialchars(json_encode([
-    'algorithm' => $challenge->algorithm,
-    'challenge' => $challenge->challenge,
-    'maxnumber' => $challenge->maxNumber,
-    'salt'      => $challenge->salt,
-    'signature' => $challenge->signature,
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$challengeJsonRaw = $challenge->toJson();
 ```
 
 ### Widget HTML
 
 ```html
-<!-- Widget CDN (v3 SHA-based) -->
-<script async defer
-    src="https://cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js"
-    type="module">
-</script>
+<!-- Widget da CDN npm pinnata (non dal branch git non pinnato) + traduzione italiana.
+     I due <script type="module"> eseguono in ordine di documento: il primo registra
+     window.$altcha, il secondo vi inserisce le stringhe i18n italiane. -->
+<script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/main/altcha.min.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/i18n/it.js"></script>
 
 <altcha-widget
-    challengejson="<?php echo $challengeJson ?>"
-    strings='{"label":"Non sono un robot","verified":"Verificato",...}'>
+    id="altchaWidget"
+    challenge="<?php echo htmlspecialchars($challengeJsonRaw, ENT_QUOTES, 'UTF-8'); ?>"
+    name="altcha">
 </altcha-widget>
+
+<button type="submit" id="submitBtn" disabled>Accedi</button>
 ```
 
-> **Nota:** per questa versione del widget (`cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js`) l'attributo per la challenge inline è `challengejson`, non `challenge`.
+### Gating del pulsante submit (JavaScript)
+
+Il pulsante parte `disabled` e si abilita solo quando il widget conferma lo stato `verified`; qualunque altro stato (errore, scadenza, reset) lo ridisabilita:
+
+```javascript
+const widget = document.getElementById('altchaWidget');
+const submitBtn = document.getElementById('submitBtn');
+
+widget.addEventListener('verified', function () {
+    submitBtn.disabled = false;
+});
+
+widget.addEventListener('statechange', function (ev) {
+    if (ev.detail?.state !== 'verified') {
+        submitBtn.disabled = true;
+    }
+});
+```
 
 ### Verifica server-side (actionv3.php)
 
 ```php
-use AltchaOrg\Altcha\V1\Altcha as AltchaV1;
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\Challenge;
+use AltchaOrg\Altcha\ChallengeParameters;
+use AltchaOrg\Altcha\Payload;
+use AltchaOrg\Altcha\Solution;
+use AltchaOrg\Altcha\VerifySolutionOptions;
+use Shady\Altcha\Enum\Pbkdf2Difficulty;
 
 $altchaRaw = filter_input(INPUT_POST, 'altcha');   // payload base64 dal widget
+$difficulty = Pbkdf2Difficulty::LOW;               // deve combaciare con indexv3.php
 
-$altcha   = new AltchaV1(hmacKey: HMAC_KEY);
-$verified = $altcha->verifySolution($altchaRaw);   // bool
+$json = base64_decode($altchaRaw, true);
+$data = json_decode($json, true);
+
+$params    = ChallengeParameters::fromArray($data['challenge']['parameters'] ?? []);
+$challenge = new Challenge($params, $data['challenge']['signature'] ?? null);
+$solution  = new Solution(
+    (int) ($data['solution']['counter'] ?? 0),
+    (string) ($data['solution']['derivedKey'] ?? ''),
+);
+$payload = new Payload($challenge, $solution);
+
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY);
+$result = $altcha->verifySolution(new VerifySolutionOptions(
+    payload: $payload,
+    algorithm: new Pbkdf2($difficulty->hmacAlgorithm()),
+));
+
+$verified = $result->verified;
+// $result->expired          → true se la challenge è scaduta
+// $result->invalidSignature → true se la firma HMAC non corrisponde
 ```
 
-`verifySolution()` controlla internamente:
-- Validità della firma HMAC sulla challenge
-- Correttezza della soluzione SHA-256
-- Scadenza della challenge (se impostata via `expires`)
+### Note di migrazione da V1 (cosa non rifare)
+
+La versione precedente di questa integrazione aveva due problemi silenziosi, scoperti confrontando il codice con il sorgente del widget v3 (`altcha-org/altcha`, pacchetto npm):
+
+| Problema | Sintomo | Fix |
+|---|---|---|
+| `challengejson="..."` come attributo del widget | **Non è un attributo valido nel widget v3** (il widget lo ignorava e restava senza challenge) | Usare `challenge="<?php echo $challenge->toJson(); ?>"` |
+| `strings='{"label":"...",...}'` come attributo del widget | **Non esiste come attributo HTML nel v3** — veniva ignorato silenziosamente, il widget mostrava sempre le stringhe di default in inglese nonostante `<html lang="it">` | Caricare `altcha/i18n/it` via `<script type="module">` dopo il widget principale |
+| `<form novalidate>` | Disattivava anche la validazione nativa del checkbox `required` generato dal widget in modalità standard, oltre ai `required` su username/password: un submit poteva raggiungere `actionv3.php` **senza** PoW completata | Rimosso `novalidate` + gating esplicito del pulsante via JS (vedi sopra), così il blocco non dipende solo dalla validazione HTML5 del browser |
+
+Nessuno di questi tre problemi genera un errore visibile: il widget si renderizza comunque, solo con un comportamento diverso da quello atteso. Vale la pena ricontrollarli ogni volta che si aggiorna la versione del widget da CDN.
 
 ---
 
@@ -433,6 +492,126 @@ Struttura della risposta:
 
 ---
 
+## Integrazione 4 — Backend puro, nessun frontend (`challengebe.php` + `indexbe.php`)
+
+**File:** `challengebe.php` + `indexbe.php` (+ `do_challenge.php` come client di esempio)
+
+### Come funziona
+
+Nessuna pagina HTML, nessun widget, nessun browser richiesto: due endpoint JSON puri pensati per essere chiamati da un client qualsiasi (script, servizio, job schedulato) che deve dimostrare di aver speso un costo computazionale prima di poter eseguire codice protetto lato server.
+
+- **`challengebe.php`** (`GET`) — genera e restituisce solo il JSON della challenge, nessun HTML.
+- **`indexbe.php`** (`POST`) — verifica la soluzione inviata nel campo `altcha`; il codice protetto (nell'esempio, l'`echo "Completed"` dopo il gate) viene eseguito **solo** se `verifySolution()->verified === true`. Prima della verifica non esiste alcuna scorciatoia: la variabile che decide l'esecuzione parte sempre `false` e non c'è alcun valore hardcoded.
+- **`do_challenge.php`** — client CLI di esempio: chiama `challengebe.php`, risolve la PoW in locale con `Altcha::solveChallenge()`, poi chiama `indexbe.php` con la soluzione. Serve a dimostrare/collaudare il protocollo end-to-end da riga di comando.
+
+Le due chiavi HMAC e il tier di difficoltà di `challengebe.php` e `indexbe.php` **devono restare sincronizzati** (sono duplicati nei due file, per coerenza con lo stile già usato in `indexpow2.php`/`actionpow2.php`).
+
+### Generazione della challenge (challengebe.php)
+
+```php
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\CreateChallengeOptions;
+use Shady\Altcha\Enum\Pbkdf2Difficulty;
+
+const HMAC_KEY_BE = '...'; // deve combaciare con indexbe.php
+
+header('Content-Type: application/json; charset=UTF-8');
+
+$difficulty = Pbkdf2Difficulty::LOW; // deve combaciare con indexbe.php
+
+$altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_BE);
+$challenge = $altcha->createChallenge(new CreateChallengeOptions(
+    algorithm: new Pbkdf2($difficulty->hmacAlgorithm()),
+    cost: $difficulty->cost(),
+    keyPrefixLength: $difficulty->keyPrefixLength(),
+    expiresAt: new DateTimeImmutable('+2 minutes'),
+));
+
+echo $challenge->toJson();
+```
+
+### Verifica + esecuzione del codice protetto (indexbe.php)
+
+```php
+$altchaRaw = filter_input(INPUT_POST, 'altcha');
+$powcompletata = false; // nessuno shortcut: parte sempre false
+
+if (!empty($altchaRaw)) {
+    $json = base64_decode($altchaRaw, true);
+    $data = is_string($json) ? json_decode($json, true) : null;
+
+    if (is_array($data)) {
+        try {
+            $params    = ChallengeParameters::fromArray($data['challenge']['parameters'] ?? []);
+            $challenge = new Challenge($params, $data['challenge']['signature'] ?? null);
+            $solution  = new Solution(
+                (int) ($data['solution']['counter'] ?? 0),
+                (string) ($data['solution']['derivedKey'] ?? ''),
+            );
+            $payload = new Payload($challenge, $solution);
+
+            $altcha = new Altcha(hmacSignatureSecret: HMAC_KEY_BE);
+            $result = $altcha->verifySolution(new VerifySolutionOptions(
+                payload: $payload,
+                algorithm: new Pbkdf2($difficulty->hmacAlgorithm()),
+            ));
+
+            $powcompletata = $result->verified;
+        } catch (Throwable) {
+            $powcompletata = false;
+        }
+    }
+}
+
+if (!$powcompletata) {
+    http_response_code(403);
+}
+
+if ($powcompletata) {
+    // Da qui in poi il PoW è verificato: qualunque logica va qui.
+    echo "Completed";
+}
+```
+
+`indexbe.php` **non chiama mai** `solveChallenge()` — solo `verifySolution()`. Il server non risolve la propria challenge in nessun punto del codice.
+
+### Protocollo lato client (qualunque linguaggio)
+
+1. `GET challengebe.php` → `{"parameters": {...}, "signature": "..."}`.
+2. Risolvere in locale la PoW PBKDF2: incrementare un `counter`, calcolare `PBKDF2(nonce+counter, salt, cost iterazioni)` finché il prefisso esadecimale del risultato non combacia con `keyPrefix`. È uno standard disponibile in qualunque libreria crypto (`hashlib.pbkdf2_hmac` in Python, `crypto.pbkdf2Sync` in Node, `PBKDF2` in Go/OpenSSL) — non serve PHP.
+3. `POST indexbe.php` con campo form `altcha` = base64 di:
+   ```json
+   {"challenge": {"parameters": {...}, "signature": "..."}, "solution": {"counter": 477, "derivedKey": "<hex>"}}
+   ```
+4. Risposta `200 Completed` se valido, `403` se soluzione errata/mancante o challenge scaduta.
+
+### Client di esempio (do_challenge.php)
+
+```bash
+php do_challenge.php https://tuo-dominio.tld
+```
+
+Usa `ext-curl` per le due richieste HTTP e la stessa libreria `altcha-org/altcha` lato client solo per implementare `solveChallenge()` — il client **non istanzia mai `Altcha` con la chiave HMAC**, la firma resta un segreto esclusivamente server-side:
+
+```php
+// Nessuna chiave HMAC richiesta per risolvere: solveChallenge() non firma né verifica nulla.
+$hmacAlgorithm = HmacAlgorithm::from(str_replace('PBKDF2/', '', $params->algorithm));
+
+$solver = new Altcha();
+$solution = $solver->solveChallenge(new SolveChallengeOptions(
+    algorithm: new Pbkdf2($hmacAlgorithm),
+    challenge: $challenge,
+    timeout: 30.0,
+));
+```
+
+> **Dove gira `do_challenge.php` conta.** Se lo lanci sulla stessa macchina che ospita `indexbe.php`, il calcolo PBKDF2 (il "costo" della PoW) viene speso dalla CPU del tuo stesso server — è utile per collaudare il protocollo, ma non dimostra nulla sul costo reale imposto a un client esterno. Per un test realistico, esegui `do_challenge.php` da una macchina diversa (es. il tuo laptop) puntando `base_url` al dominio pubblico.
+>
+> Per ambienti con certificato TLS self-signed/non pubblico, lo script espone `ALTCHA_INSECURE_SSL=1` per disabilitare la verifica del certificato — **da non usare mai in produzione con un certificato valido**.
+
+---
+
 ## Sequence diagram — Widget v3
 
 ```mermaid
@@ -444,27 +623,29 @@ sequenceDiagram
 
     U->>B: GET indice (indexv3.php)
     B->>S: HTTP GET /indexv3.php
-    S->>S: V1\Altcha::createChallenge()<br/>(SHA-256, maxNumber=100000, exp=+5min)
-    S-->>B: HTML + challengejson attribute
+    S->>S: Altcha::createChallenge()<br/>(Pbkdf2/LOW, exp=+2min)
+    S-->>B: HTML + altcha-widget challenge="..."<br/>pulsante #submitBtn disabled
 
-    B->>CDN: Carica altcha.min.js (gh/altcha-org)
-    CDN-->>B: Widget SHA-256
+    B->>CDN: Carica altcha@3.1.0/main + i18n/it.js
+    CDN-->>B: Widget PBKDF2 + traduzione italiana
 
     B->>B: Widget renderizza checkbox<br/>"Non sono un robot"
 
     U->>B: Click checkbox
-    B->>B: PoW SHA-256 (fino a soluzione)<br/>Worker interno
+    B->>B: PoW PBKDF2 (WebCrypto nativo, < 1s)<br/>fino a soluzione
 
-    B->>B: Widget imposta campo nascosto<br/>name="altcha" (payload base64)
+    B->>B: Widget imposta campo nascosto<br/>name="altcha" (payload base64)<br/>evento "verified"
+
+    B->>B: JS: submitBtn.disabled = false
 
     U->>B: Submit form
     B->>S: HTTP POST /actionv3.php<br/>username, password, altcha
 
-    S->>S: V1\Altcha::verifySolution(altchaRaw)<br/>• Verifica firma HMAC<br/>• Verifica soluzione SHA-256<br/>• Verifica scadenza
+    S->>S: base64_decode → json_decode<br/>ChallengeParameters::fromArray()<br/>Altcha::verifySolution()<br/>• Verifica firma HMAC<br/>• Ricalcola PBKDF2 e confronta keyPrefix<br/>• Verifica scadenza
 
     alt Verifica OK
         S-->>B: HTTP 200 — Accesso riuscito
-    else Verifica fallita
+    else Verifica fallita / scaduta
         S-->>B: HTTP 400 — Accesso negato
     end
 ```
@@ -565,16 +746,42 @@ sequenceDiagram
 
 ---
 
+## Sequence diagram — Backend puro (client headless)
+
+```mermaid
+sequenceDiagram
+    actor Op as Operatore
+    participant C as Client (do_challenge.php<br/>o qualunque altro linguaggio)
+    participant S as Server PHP
+
+    Op->>C: php do_challenge.php <base_url>
+
+    C->>S: HTTP GET /challengebe.php
+    S->>S: Altcha::createChallenge()<br/>(Pbkdf2/LOW, exp=+2min)
+    S-->>C: JSON {"parameters": {...}, "signature": "..."}
+
+    Note over C: Nessuna pagina, nessun browser,<br/>nessuna chiave HMAC nota al client
+
+    C->>C: Altcha::solveChallenge()<br/>(o equivalente PBKDF2 in altro linguaggio)<br/>trova counter tale che derivedKey ha prefisso keyPrefix
+
+    C->>S: HTTP POST /indexbe.php<br/>altcha=base64({"challenge":...,"solution":...})
+
+    S->>S: base64_decode → json_decode<br/>ChallengeParameters::fromArray()<br/>new Challenge / Solution / Payload<br/>Altcha::verifySolution() — HMAC + PBKDF2 + scadenza
+
+    alt Verifica OK
+        S->>S: $powcompletata = true<br/>esegue il codice protetto
+        S-->>C: HTTP 200 "Completed"
+    else Verifica fallita / mancante / scaduta
+        S->>S: $powcompletata resta false<br/>codice protetto MAI eseguito
+        S-->>C: HTTP 403
+    end
+```
+
+---
+
 ## Parametri di configurazione
 
-### API V1 — Widget visibile (SHA)
-
-| Parametro | Default | Descrizione |
-|---|---|---|
-| `algorithm` | `SHA-256` | Algoritmo hash (`SHA-1`, `SHA-256`, `SHA-512`) |
-| `maxNumber` | `1.000.000` | Limite superiore del numero da trovare. Valori più alti → più difficoltà |
-| `expires` | `null` | Scadenza della challenge (`DateTimeImmutable`) |
-| `saltLength` | `12` | Lunghezza del salt casuale in byte |
+> **Nota:** la libreria espone anche un'API V1 legacy basata su hash SHA (namespace `AltchaOrg\Altcha\V1\*`), mantenuta per retrocompatibilità. Nessun file di questo progetto la usa più: tutte le integrazioni sono state migrate all'API V2 (key-derivation: PBKDF2/Argon2id/Scrypt), documentata qui sotto. Vedi [Note di migrazione da V1](#note-di-migrazione-da-v1-cosa-non-rifare) per i dettagli della migrazione di `indexv3.php`.
 
 ### API V2 — Widget PoW Argon2id invisibile
 
@@ -743,8 +950,10 @@ Questo progetto implementa entrambi: PBKDF2 tramite `Pbkdf2Difficulty` e Argon2i
 
 ## Note di sicurezza
 
-- **HMAC key**: le costanti `HMAC_KEY` e `HMAC_KEY_POW` devono essere mosse in variabili d'ambiente (`.env`) in produzione. Non committare mai le chiavi nel repository.
-- **Replay attack**: la libreria controlla la scadenza ma **non gestisce un nonce store** per prevenire il riuso della stessa soluzione. In produzione occorre memorizzare i nonce verificati (es. in Redis/database) per la durata della validità della challenge.
+- **HMAC key**: le costanti `HMAC_KEY`, `HMAC_KEY_POW` e `HMAC_KEY_BE` devono essere mosse in variabili d'ambiente (`.env`) in produzione. Non committare mai le chiavi nel repository.
+- **Replay attack**: la libreria controlla la scadenza ma **non gestisce un nonce store** per prevenire il riuso della stessa soluzione — vale per tutte le integrazioni, incluso `indexbe.php`. In produzione occorre memorizzare i nonce/signature già verificati (es. in Redis/database) per la durata della validità della challenge, se serve invalidare una soluzione dopo il primo uso.
 - **HTTPS**: il payload `altcha` viaggia nel body POST; usare sempre HTTPS per evitare intercettazioni.
 - **Argon2id `memoryCost`**: valori alti (> 64 MB) possono mettere sotto pressione dispositivi mobili o browser con memoria limitata. Testare su hardware target prima del deploy.
+- **`filter_input(INPUT_SERVER, ...)` sotto il server di sviluppo integrato di PHP**: `filter_input(INPUT_SERVER, 'REQUEST_METHOD')`, usato in tutti gli endpoint di verifica (`actionv3.php`, `actionpownoform.php`, `challengebe.php`, `indexbe.php`, ecc.), ritorna sempre `null` sotto `php -S` — è un comportamento noto di quella SAPI, non un bug del progetto. Il sintomo è che ogni richiesta viene trattata come "non POST"/"non GET" e rifiutata. Su un webserver reale (Apache/nginx+FPM) `$_SERVER['REQUEST_METHOD']` e `filter_input(INPUT_SERVER, ...)` sono allineati e funzionano correttamente. Per testare in locale, usare `$_SERVER['REQUEST_METHOD']` direttamente o testare contro un vero webserver invece di `php -S`.
+- **`do_challenge.php` e `ALTCHA_INSECURE_SSL`**: lo script accetta un flag per disabilitare la verifica del certificato TLS, utile solo contro host di test con certificato self-signed. Non deve mai restare attivo quando il client punta a un dominio di produzione con certificato valido.
 - **CDN integrity**: in produzione valutare l'aggiunta dell'attributo `integrity` (Subresource Integrity) ai tag `<script>` che caricano da CDN.
