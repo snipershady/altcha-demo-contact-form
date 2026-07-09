@@ -41,8 +41,9 @@ $challengeJsonRaw = $challenge->toJson();
             Senza questo secondo import, il widget mostra le stringhe di default in
             inglese anche con <html lang="it">.
         -->
-        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/main/altcha.min.js"></script>
-        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.1.0/dist/i18n/it.js"></script>
+        
+        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.2.0/dist/main/altcha.min.js"></script>
+        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.2.0/dist/i18n/it.js"></script>
 
         <style>
             body {

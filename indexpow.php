@@ -67,7 +67,7 @@ $challengeJsonRaw = $challenge->toJson();
                 });
             }());
         </script>
-        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.0.10/dist/main/altcha.min.js"></script>
+        <script type="module" src="https://cdn.jsdelivr.net/npm/altcha@3.2.0/dist/main/altcha.min.js"></script>
 
         <style>
             body {
